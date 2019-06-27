@@ -1,5 +1,7 @@
 //========================================================================================FIRMWARE INFORMATION===================
 /*
+openHW project (?) Denis
+https://github.com/DenisDx/openHW
 
 
 /*----------------------------------------------------------------------------------
@@ -31,11 +33,20 @@ define uECC_SUPPORT_COMPRESSED_POINT 0
 //Useful:
 //http://wikihandbk.com/wiki/ESP8266:%D0%9F%D1%80%D0%BE%D1%88%D0%B8%D0%B2%D0%BA%D0%B8/Arduino/PROGMEM
 
+https://russiansemiresearch.com
+
+//stm
+http://tqfp.org/stm32/zashita-ot-schityvaniya-proshivki-stm32.html
 
 */
 //========================================================================================FIRMWARE SETTINGS=====================
 //Board: (if nothing changed then default settings will be applied. You can see details in the boards section)
-//#define board_Heltec
+//#define board_Heltec_WiFi_Kit_32
+        //use WiFi_Kit_32 board for https://dl.espressif.com/dl/package_esp32_index.json  library
+
+#define board_Heltec_WiFi_Kit_8  
+         //= HTIT-W8266 //https://heltec.org/project/wifi-kit-8/  //library: In the Arduino IDE, in the Tools > Board menu choose  //choose board: NodeMCU 1.0 (ESP-12E Module)
+         //alternative from Heltec:   https://github.com/Heltec-Aaron-Lee/WiFi_Kit_series/releases/download/0.0.1/package_heltec_esp8266_index.json  ; board name Wifi_Kit_8
 
 //---------------------------------------linkage settings--------------------
 //Use SHA256 (needs 450+ bytes RAM)
@@ -44,7 +55,8 @@ define uECC_SUPPORT_COMPRESSED_POINT 0
 #define DEBUG 1
 
 //---------------------------------------defaults ---------------------------
-#define SERIAL_TIMEOUT 100
+#define DROP_IF_WRONG_PIN true
+#define SERIAL_TIMEOUT 500 //milliseconds
 #define PIN_TIMEOUT 100000 //100 sec
 //Maximum PIN length
 #define PIN_MAX_SIZE 8
@@ -56,7 +68,7 @@ define uECC_SUPPORT_COMPRESSED_POINT 0
 // #pragma message ("DO NOT FORGET TO REVIEW FIRMWARE SETTINGS")
 
 //==============================================================================================================================
-
+#define VERSION F("0.2")
 
 //============================================================== Includes  =====================
 #include <types.h>
@@ -69,7 +81,10 @@ define uECC_SUPPORT_COMPRESSED_POINT 0
 //U8g2 for screeen
 //Esp32 for the board
 //pro_micro / uno ... define nothing
-#ifdef board_Heltec
+#ifdef board_Heltec_WiFi_Kit_32
+  #define OPTION_screen 1
+#endif
+#ifdef board_Heltec_WiFi_Kit_8
   #define OPTION_screen 1
 #endif
 //============================================================== helper section  ================
@@ -119,12 +134,13 @@ struct Settings
 
   byte attCounter = 0; //attempt counter. Zero it if known pin
   bool mode1 = 0; //if true, we have entered correct PIN1. So, we are working with privkey1 until the pin0 will be entered. it is possible only if no pins entered for one week
+  bool passwordProtected = 0; //if the key is encrypted by password. If state.password not entered then show error in case the privkey queried
 
   //user settings
   char uname[24] = "";
   bool askPinEveryTime = false; //if we need ask pin for every privKey0 access
   bool lockPinAfterMs = 0; //if we need to forget pin 
-
+ 
   byte buttonMode = 1; //0: don't use button 1: only for pin unlock 2: for each private key access
 
   //misc
@@ -141,6 +157,8 @@ struct State
   unsigned long lastPinEnter = 0; //millis of the last pin enter (no matter if it was correct or not
   char pin[PIN_MAX_SIZE+1]; //pin entered
   unsigned long lastMode1Millis = 0; //last millis attempt for mode 1  
+  byte password[16]; //password for keys protection. 16 bytes
+  byte passwordLen = 0; //password for keys protection. 16 bytes
   //String commandWaiting; //the command waiting now. "" if there is no command. Will be executed after any event like pin enter or button pressed
 };
 
@@ -196,7 +214,7 @@ void printMemory(bool newline=true){
   //Serial.print(F(" __malloc_heap_start:"));Serial.println((int)__malloc_heap_start); 
   //Serial.print(F(" __brkval:"));Serial.println((int)__brkval);   
     #ifdef __AVR__
-    Serial.print(F("Memory: free:"));Serial.print(getFreeMemory()); 
+    Serial.print(F("#Memory: free:"));Serial.print(getFreeMemory()); 
     
     if (newline) Serial.println();
     #endif // __AVR__
@@ -219,15 +237,23 @@ bool checkMemory(int minVolume) {
 #define PGMSTR(x) (__FlashStringHelper*)(x) 
 const PROGMEM char TEST_KEY_1[] = {"cNpjQkzqzoEvgg1GhHQ7JY2cNjh97rhqS1wDH3m7EDnB1T5hrB5D"};
 
-size_t getProgmemStr(const PROGMEM char * strname, char result[]) {
-  for (byte k = 0; k <strlen_P(strname) ; k++) result[k] = pgm_read_byte_near(strname + k);
-  return strlen_P(strname);
-};
+#if defined(ESP8266)
+ size_t getProgmemStr(const char * strname, char result[]) {
+    for (byte k = 0; k <strlen_P(strname) ; k++) result[k] = pgm_read_byte_near(strname + k);
+    return strlen_P(strname);
+  };
+#else
+  size_t getProgmemStr(const PROGMEM char * strname, char result[]) {
+    for (byte k = 0; k <strlen_P(strname) ; k++) result[k] = pgm_read_byte_near(strname + k);
+    return strlen_P(strname);
+  };
+#endif
 
 #ifdef DEBUG
 void debugPrint(const __FlashStringHelper * str, bool newline=true, bool printMem=false) {
-  Serial.print(str);Serial.print(F(" "));
-  if (printMem) printMemory(newline); else if (newline) Serial.println();
+  Serial.print("#");Serial.print(str);Serial.print(F(" "));
+  if (printMem) printMemory(false); 
+  if (newline) Serial.println();
 };
 #else
   #define debugPrint(x)
@@ -334,7 +360,13 @@ void readSettings(Settings *settings)
   //Serial.print("sizeof(Settings)=");Serial.println(sizeof(Settings));
   //settings->crc = 123; 
   //return;
-  for (int i=0; i<sizeof(Settings); i++) ((byte*)settings)[i] = EEPROM.read(i);
+  #if defined(ESP8266) || defined(ESP31B) || defined(ESP32)
+    EEPROM.begin(sizeof(Settings));
+    for (int i=0; i<sizeof(Settings); i++) ((byte*)settings)[i] = EEPROM.read(i);
+    EEPROM.end();
+  #else  
+    for (int i=0; i<sizeof(Settings); i++) ((byte*)settings)[i] = EEPROM.read(i);
+  #endif  
   //settings loaded
   if (crc32b(((byte*)settings),sizeof(Settings) - sizeof(settings->crc))!=settings->crc) {
      //settings are empty or invalid
@@ -357,31 +389,66 @@ void writeSettings(Settings *settings);
 void writeSettings(Settings *settings)
 {
   settings->crc = crc32b(((byte*)settings),sizeof(Settings) - sizeof(settings->crc));
+
+  #if defined(ESP8266) || defined(ESP31B) || defined(ESP32)
+    EEPROM.begin(sizeof(Settings));
+    for (int i=0; i<sizeof(Settings); i++) 
+      if (EEPROM.read(i)!=((byte*)settings)[i]) 
+        EEPROM.write(i,((byte*)settings)[i]);
+    //EEPROM.commit();
+    EEPROM.end();
+        
+    debugPrint(F("Settings recorded to NVS."),1,1);
+  #else
+    for (int i=0; i<sizeof(Settings); i++) 
+      if (EEPROM.read(i)!=((byte*)settings)[i]) 
+        EEPROM.write(i,((byte*)settings)[i]);
+    
+    debugPrint(F("Settings recorded to EEPROM."),1,1);
+  #endif
+  /*
+  bool changed = false;
+  
+  settings->crc = crc32b(((byte*)settings),sizeof(Settings) - sizeof(settings->crc));
   for (int i=0; i<sizeof(Settings); i++) 
-    if (EEPROM.read(i)!=((byte*)settings)[i])  
-      EEPROM.write(i,((byte*)settings)[i]);  
-  debugPrint(F("Settings recorded."),1,1);
+    if (EEPROM.read(i)!=((byte*)settings)[i]) { 
+      EEPROM.write(i,((byte*)settings)[i]);
+      changed = true;  
+    };  
+
+  if (changed) EEPROM.commit();
+  */
+  /*
+  settings->crc = crc32b(((byte*)settings),sizeof(Settings) - sizeof(settings->crc));
+  for (int i=0; i<sizeof(Settings); i++) EEPROM.update(i,((byte*)settings)[i]);
+  EEPROM.commit();
+  */
+      
+  
 };
 
 void onUpdateSettings(Settings *settings)
 {
   //onUpdateSettings(&settings);
 
-  if (!memnchr(settings->privKey0,0,sizeof(settings->privKey0))) {
+  if (!memnchr(settings->privKey0,0,sizeof(settings->privKey0))) 
     setScreenStatus("NO DATA");
-  } else {
+  else 
     if (settings->pin0[0]==0) //PIN not set
        setScreenStatus("PIN NOT SET");
     else 
       if (
           (strcmp(settings->pin0,state.pin)==0) 
           ||
-          (strcmp(settings->pin1,state.pin)==0)
+          ((strcmp(settings->pin1,state.pin)==0) && (settings->pin1[0]!=0))
          )
          setScreenStatus("UNLOCKED");   
       else   
-         setScreenStatus("LOCKED");   
-  };
+         if (pinPos>0)
+           setScreenStatus("ENTER PIN");
+         else
+           setScreenStatus("LOCKED");
+  
 };  
 
 void initialSettingsLoading(void) {
@@ -403,7 +470,7 @@ void setup() {
 
   memset(&state,0,sizeof(State));
   
-  Serial.print(F("openHW v0.1   Type 'help' for help\n"));
+  Serial.print(F("openHW v"));  Serial.print(VERSION);  Serial.println(F(" Type 'help' for help\n"));
   uECC_set_rng(&RNG);
 
   screenInit();
@@ -413,11 +480,59 @@ void setup() {
   initialSettingsLoading();
   //Serial.print(F("AFFTER ")); printMemory();
   
-  pinPos=0; cmdLen=0; 
+  pinPos=0; 
+  cmdLen=0; 
 
   #ifdef DEBUG
-    Serial.print(F("setup() done: "));printMemory();
+    Serial.print(F("#setup() done: "));printMemory();
   #endif  
+}
+
+
+byte scfStatus() {
+  //(EMPTY/LOCKED/UNLOCKED/NOPIN)
+  Settings settings;
+  readSettings(&settings); 
+
+  #ifdef DEBUG
+    Serial.print(F("#=======================Status for ")); Serial.println(millis());
+    Serial.print(F("#Status for ")); Serial.println(millis());
+    Serial.print(F("#lastPinEnter = ")); Serial.println(state.lastPinEnter);
+    Serial.print(F("#pin: ")); Serial.println(state.pin);
+    Serial.print(F("#lastMode1Millis= ")); Serial.println(state.lastMode1Millis);    
+    Serial.print(F("#password= ")); hex8Serial(state.password,state.passwordLen); Serial.println();    
+    Serial.print(F("#passwordLen= ")); Serial.println(state.passwordLen);        
+    Serial.println(F("#-----------")); 
+    //ibuf,cmdLen-1,&pinPos
+    Serial.print(F("#ibuf= ")); hex8Serial((unsigned char*)(ibuf),cmdLen); Serial.println();
+    Serial.print(F("#cmdLen= ")); Serial.println(cmdLen);        
+    Serial.print(F("#pinPos= ")); Serial.println(pinPos);        
+    
+  #endif
+
+
+  if (!memnchr(settings.privKey0,0,sizeof(settings.privKey0))) {
+    Serial.println(F("EMPTY"));
+    return 0; //no main key
+  };
+  
+  if (settings.pin0[0]==0) {
+    Serial.println(F("NOPIN"));
+    return 0; //no pin set
+  };
+
+  if (
+     (strcmp(settings.pin0,state.pin)==0)
+     ||
+     ((strcmp(settings.pin1,state.pin)==0) && (settings.pin1[0]!=0))
+     ) 
+   {
+    Serial.println(F("UNLOCKED"));
+    return 0; //no pin set
+   };
+
+  Serial.println(F("LOCKED"));
+  return 0;
 }
 
 byte scfHelp() {
@@ -432,22 +547,74 @@ byte scfHelp() {
   //for (byte i = 0; i<helpMessagesLen)
   //for (byte k = 0; k < strlen_P(helpMessages[i]); k++)  Serial.print(pgm_read_byte_near(helpMessages + k));  
 */  
-  Serial.print(F("openHW v0.1\n"));
+  Serial.print(F("openHW "));Serial.println(VERSION);
   Serial.print(F("help : show this text\n"));
   Serial.print(F("setPrivateKey(<private1>[,<private2>]) : sets private key(s). Data in code58check form.\n"));
   Serial.print(F("  it will erase all privateKeys and set all pins to "".\n"));
   Serial.print(F("getPublicKey : gets current public key\n"));
-  Serial.print(F("signMessage(<message>) : signs the message. Message in hex. Result in hex\n"));
+  Serial.print(F("signMessage(<message>[,bip66padding]) : signs the message. Message in hex. Result in hex\n"));
   //Serial.print(F(" (*) signTX(TXdata>,<nOut>) : signs transaction input nOut. Message in hex. Result in hex\n"));
-  Serial.print(F("signTXDigest(<TXdata>) : signs transaction digest. Data in hex. Result in hex\n"));
+  //Serial.print(F("signTXDigest(<TXdata>[,bip66padding]) : signs transaction digest. Data in hex. Result in hex\n"));
   Serial.print(F("setPin(<pin>) : sets current pin. Pin is text (don't use \")\" in pin)\n"));
   Serial.print(F("setPin2(<pin>) : sets plausible denial pin. Pin is text (don't use \")\" in pin)\n"));
   Serial.print(F("  WARNING: setting any of the pins in P.D. mode will make P.D. key main and will erase main private key."));  
+
+  Serial.print(F("setPassword([<old password hex>,]<new password hex>) : set password for private key in memory\n"));
+  Serial.print(F("  the keys will be encrypted in memory with the password\n"));  
+  Serial.print(F("  maximum (and recommended) password size: 16 bytes\n"));    
+  Serial.print(F("  if you use 1 argument, you just set the current password\n"));  
+  Serial.print(F("  if you use 2 arguments, the password will be changed from first to second\n"));
+  Serial.print(F("  in PD mode password will be changed only for PD key.\n"));
+    
   Serial.print(F("setPinMode(<N>) : sets pin request mode. 0 for ask once; 1 for asking every time\n"));  
   Serial.print(F("setPinLockDelay(<Milliseconds>) : sets time for pin lock after enter\n"));
   Serial.print(F("setButtonMode(<N>) : sets button mode. 0: button is not used; 1: use only for pin confirmatuion; 2: use for Private Key access confirmation\n"));
   Serial.print(F("getConfig([parname]) : Returns configuration. Call getConfig() for all params with names\n"));        
- 
+
+  Serial.print(F("status : Returns current status (EMPTY/LOCKED/UNLOCKED/NOPIN)\n"));
+  Serial.print(F("lock : lock device. Returns OK or ERROR (if pin not set))\n"));
+  Serial.print(F("unlock : unlock device. Returns OK or ERROR\n"));
+  Serial.print(F("helloHW : Returns hello string (HELLO OPENHW <version>)\n"));          
+  #ifdef DEBUG
+    Serial.print(F("test(<parname>) : show test # (1,...) or calc sha256 \n"));        
+  #endif
+  Serial.print(F("===automation tips===\n"));
+  Serial.print(F("Command is case-insensetive (you can use UPPERCASE or whatever))\n"));  
+  Serial.print(F("You can add you pin to the end of the command line (for pin=1234))\n"));
+  Serial.print(F("  GetPublicKey1234\n"));  
+  Serial.print(F("There are 5 possibles answers:\n"));
+  Serial.print(F("0. \"#comment.\" appears only in debug mode. Ignore it\n"));  
+  Serial.print(F("1. \"OK: comment.\" Operation is succeseful\n"));    
+  Serial.print(F("2. \"ERROR: comment.\" Operation is not succeseful\n"));  
+  Serial.print(F("3. \"PIN: comment\" PIN request\n"));    
+  Serial.print(F("4. \"PASSWORD: comment\" Password request\n"));      
+  Serial.print(F("5. \"DATA\" Requested data\n"));  
+  Serial.print(F("===Examples===\n")); 
+  Serial.print(F("Status\n"));
+  Serial.print(F("  prints current device state\n"));
+  Serial.print(F("unlock1234\n"));
+  Serial.print(F("  tries to unlock with pin 1234.\n"));
+  Serial.print(F("getPublicKey\n"));
+  Serial.print(F("  prints current public key (uncompressed). PIN might be requested\n"));  
+  Serial.print(F("setPrivateKey(cNpjQkzqzoEvgg1GhHQ7JY2cNjh97rhqS1wDH3m7EDnB1T5hrB5D)\n"));
+  Serial.print(F("  Sets main private key (no PD key sets)\n"));  
+  Serial.print(F("setPrivateKey(cNpjQkzqzoEvgg1GhHQ7JY2cNjh97rhqS1wDH3m7EDnB1T5hrB5D,cTrcwmE5bi2D6RRpWRLssGgLZweV5QZDyX1KTj5MZw279sjoJSyJ)\n"));  
+  Serial.print(F("  Sets main private key and a PD key\n"));    
+  Serial.print(F("setPrivateKey(cNpjQkzqzoEvgg1GhHQ7JY2cNjh97rhqS1wDH3m7EDnB1T5hrB5D)\n"));
+  Serial.print(F("  Sets main private key (no PD key sets)\n"));  
+  Serial.print(F("signMessage(E3FFCC983D047EAB781C31AFA21B71AD15393C3B3EBD9944F278652F85E18266)\n"));  
+  Serial.print(F("  signs the digest (it is \"test\" substring digest for Emer magic word)\n"));    
+  Serial.print(F("signMessage(E3FFCC983D047EAB781C31AFA21B71AD15393C3B3EBD9944F278652F85E18266,1)\n"));  
+  Serial.print(F("  signs the digest for transaction padding (use it for sign transactions)\n"));     
+  Serial.print(F("setPassword(,00112233445566778899AABBCCDDEEFF)\n"));  
+  Serial.print(F("  sets the password assuming where was no password before\n"));     
+  Serial.print(F("setPassword(AABBCCDDEEFF,00112233445566778899AABBCCDDEEFF)\n"));   
+  Serial.print(F("  sets the password assuming that old password is AABBCCDDEEFF\n"));     
+  Serial.print(F("setPassword(00112233445566778899AABBCCDDEEFF)\n"));   
+  Serial.print(F("  just set current passwors (do not change it in EEPROM)\n"));       
+  Serial.print(F("  WARNING: There is no way to tell the right password from the wrong one\n"));
+  Serial.print(F("  Any password will be accepted, but the private key will be different from the specified one.\n"));  
+  Serial.print(F("  Use getPublicKey for determine private key correctness\n"));    
 };
 
 //=========================================================== cmd functions ================================
@@ -540,12 +707,31 @@ size_t checkAndDecodePrivateKey(const char *data, size_t len, uint8_t *result) {
   return 0;
 }
 
+void dropSettings(Settings *settings);
+
+void dropSettings(Settings *settings){
+    settings->attCounter = 0; //attempt counter. Zero it if known pin
+    settings->mode1 = 0; //if true, we have entered correct PIN1. So, we are working with privkey1 until the pin0 will be entered. it is possible only if no pins entered for one week
+    settings->passwordProtected = 0; //if the key is encrypted by password. If state.password not entered then show error in case the privkey queried
+
+    memset(settings->privKey0,0,sizeof(settings->privKey0));
+    memset(settings->privKey1,0,sizeof(settings->privKey1));
+    settings->pin0[0]=0;
+    settings->pin1[0]=0;
+
+    state.lastPinEnter = 0; //millis of the last pin enter (no matter if it was correct or not
+    state.pin[0]=0;
+    state.lastMode1Millis = 0; //last millis attempt for mode 1  
+    state.passwordLen = 0; //password for keys protection. 16 bytes
+}
+
 void savePrivateKey(const uint8_t *data,byte n){
   //safe key #n
   //saving key 0 removes key 1
   Settings settings;
   readSettings(&settings);
   if (n==0) {
+    dropSettings(&settings);
     if (data==NULL) memset(settings.privKey0,0,sizeof(settings.privKey0));
     else memcpy(settings.privKey0,data,32);
     settings.pin0[0]=0;
@@ -562,11 +748,11 @@ byte doSetPrivateKey(const char *data, size_t len) {
   //return 1 for pin request
   //if (!unlocked()) return 1;  ->We don't need it to set pins
   #ifdef DEBUG
-    Serial.print(F("Set private key: ")); for (int i=0; i<len; i++) Serial.print((char)data[i]); Serial.println(); printMemory();
+    Serial.print(F("#Set private key: ")); for (int i=0; i<len; i++) Serial.print((char)data[i]); Serial.println(); printMemory();
   #endif  
 
   //<data>[,<data2>]
-  void *cpa = memchr(data,',',len);
+  char *cpa = (char*)memchr(data,',',len);
 
   uint8_t res[32];
   uint8_t pub[64];
@@ -583,7 +769,7 @@ byte doSetPrivateKey(const char *data, size_t len) {
       if (!cpa) Serial.println(F("OK: Private key assigned"));
       if (!cpa) screenShow("OK: Private key assigned");
       #ifdef DEBUG
-        Serial.print(F("PUBKEY: ")); for (int i=0; i<64; i++) Serial.print(pub[i],HEX); Serial.println();
+        Serial.print(F("#PUBKEY: ")); for (int i=0; i<64; i++) Serial.print(pub[i],HEX); Serial.println();
       #endif 
     } else {
       Serial.println(F("ERROR: Private key assigned: no public key"));
@@ -593,14 +779,14 @@ byte doSetPrivateKey(const char *data, size_t len) {
   };
   
   //PA key
- if (cpa) if (32==checkAndDecodePrivateKey(cpa+1,len+ data - (char*)cpa -1, res)) {
+ if (cpa) if (32==checkAndDecodePrivateKey(cpa+1,len+ (data - cpa) -1, res)) {
    debugPrint(F("PA key found, ready to decode."),1,1);
    if (uECC_compute_public_key(res,pub,curve)) {
       savePrivateKey(res,1);
       Serial.println(F("OK: Both keys were assigned"));
       screenShow("OK: Both keys were assigned");
       #ifdef DEBUG
-        Serial.print(F("PUBKEY2: ")); for (int i=0; i<64; i++) Serial.print(pub[i],HEX); Serial.println();
+        Serial.print(F("#PUBKEY2: ")); for (int i=0; i<64; i++) Serial.print(pub[i],HEX); Serial.println();
       #endif 
     } else {
       Serial.println(F("ERROR: Only first key was assigned"));
@@ -610,25 +796,86 @@ byte doSetPrivateKey(const char *data, size_t len) {
  }
 };
 
+ void doDelay(unsigned long ms) {
+    for (unsigned long i=(ms/100); i>0; i--) {
+      delay(100); 
+      wdt_reset();
+      //delay(1);
+    };  
+  /*
+    wdt_disable();
+    delay(ms);
+    wdt_enable(0);
+  */
+    
+ /* 
+    unsigned long mms = ms;
+    while (mms>0) {
+      if (mms<1000) {
+        delay(mms); 
+        mms = 0;
+      } else {
+        delay(1000);
+        #ifdef DEBUG
+          Serial.print(F("."));
+        #endif  
+        mms = mms - 1000;
+      };
+        
+    };
+   */ 
+ };
+    
+void unlockedFailed(Settings *settings);
+
+void unlockedFailed(Settings *settings){
+  settings->attCounter += 1;
+  writeSettings(settings);
+  //doDelay((1UL <<(settings->attCounter-1) )*100);
+  onUpdateSettings(settings); 
+  screenShow("Wrong PIN");
+  //drop all
+  state.pin[0] = 0;
+  pinPos=0;
+  if (DROP_IF_WRONG_PIN) cmdLen=0;     
+};
+
+void unlockedSuccess(Settings *settings);
+void unlockedSuccess(Settings *settings){
+  settings->attCounter = 0;
+    
+  writeSettings(settings);
+  onUpdateSettings(settings); screenShow("Access granted");
+  if (settings->askPinEveryTime) state.pin[0] = 0;
+};
+
+
 bool unlocked() 
 //returns if the 
 // INCREASES ATTEMPT COUNTER AND MAKES DELAY
 { 
+  debugPrint(F("unlocked() called."),1,1);
   Settings settings;
   readSettings(&settings); 
-  if (settings.pin0[0]==0) return true;
+  if (settings.pin0[0]==0) {
+    state.pin[0] = 0; //set current pin to ""
+    return true;
+  }
   if (state.pin[0]==0) return false;
   
   //byte attCounter = 0; //attempt counter. Zero it if known pin
   //bool mode1 = 0; //if true, we have entered correct PIN1. So, we are working with privkey1 until the pin0 will be entered. it is possible only if no pins entered for one week
   //unsigned long lastMode1Millis = 0; //last millis attempt for mode 1
+
+  //do delay
+  doDelay((1UL <<(settings.attCounter-1) )*100);
    
-  
+  //if pin1 entered
   if (strcmp(settings.pin1,state.pin)==0) {
     //pin1 used
     settings.mode1 = true;
-    settings.attCounter = 0;
-    writeSettings(&settings);
+    unlockedSuccess(&settings);
+    debugPrint(F("access granted: pin1."),1,1);    
     return true;
   }
 
@@ -636,9 +883,8 @@ bool unlocked()
   if (settings.mode1 && ((millis()-state.lastMode1Millis) <(1000*432000))) {
     //too early to try
     state.lastMode1Millis = millis();
-    settings.attCounter += 1;
-    writeSettings(&settings);
-    delayMicroseconds((1UL <<(settings.attCounter-1) )*100);
+    unlockedFailed(&settings);
+    debugPrint(F("access denied: mode1."),1,1);
     return false;
   };
 
@@ -648,15 +894,14 @@ bool unlocked()
     settings.mode1 = false;
     state.lastMode1Millis = 0;
     settings.attCounter = 0;
-    writeSettings(&settings);
+    unlockedSuccess(&settings);
+    debugPrint(F("access granted: mode0 "),1,1);
     return true;
   };
 
   //wrong password
-  settings.attCounter += 1;
-  writeSettings(&settings);
-  //delayMicroseconds(100*(unsigned long)((unsigned long)1 <<(settings.attCounter-1) ));
-  delayMicroseconds((1UL <<(settings.attCounter-1) )*100);
+  unlockedFailed(&settings);  
+  debugPrint(F("access denied: mode0."),1,1);
   return false;  
 };
 
@@ -702,6 +947,7 @@ byte doGetPublicKey() {
     Serial.println(F("ERROR: can't access public key"));
     screenShow("ERROR: can't access public key");    
   };
+  return 0;
 };
 
 byte doGetConfig(const char *data, size_t len){
@@ -720,12 +966,12 @@ byte doGetConfig(const char *data, size_t len){
 
 
   #ifdef DEBUG
-   Serial.print(F("privKey0:")); hex8Serial(settings.privKey0,32); Serial.println();
-   Serial.print(F("privKey1:")); hex8Serial(settings.privKey1,32); Serial.println();
-   Serial.print(F("pin0:")); Serial.println(settings.pin0);
-   Serial.print(F("pin1:")); Serial.println(settings.pin1);
-   Serial.print(F("attCounter:")); Serial.println(settings.attCounter);
-   Serial.print(F("mode1:")); Serial.println(settings.mode1);
+   Serial.print(F("#privKey0:")); hex8Serial(settings.privKey0,32); Serial.println();
+   Serial.print(F("#privKey1:")); hex8Serial(settings.privKey1,32); Serial.println();
+   Serial.print(F("#pin0:")); Serial.println(settings.pin0);
+   Serial.print(F("#pin1:")); Serial.println(settings.pin1);
+   Serial.print(F("#attCounter:")); Serial.println(settings.attCounter);
+   Serial.print(F("#mode1:")); Serial.println(settings.mode1);
   #endif
 
   Serial.print(F("Name:")); Serial.println(settings.uname);
@@ -751,10 +997,86 @@ byte doGetConfig(const char *data, size_t len){
   Serial.print(F("Sig:")); Serial.println(settings.Sig,HEX);
 
   #ifdef DEBUG
-    Serial.print(F("CRC:")); Serial.println(settings.crc,HEX);
+    Serial.print(F("#CRC:")); Serial.println(settings.crc,HEX);
   #endif
   
   return 0;
+};
+
+byte scfUnlock(){
+  if (!unlocked()) return 1; 
+
+  Settings settings;
+  readSettings(&settings); 
+  
+  if (settings.pin0[0]==0) {
+    screenShow("WARNING: pin not set");
+    Serial.println(F("ERROR: pin not set"));
+  } else {
+    screenShow("unlocked by user");
+    Serial.println(F("OK: unlocked"));
+  };
+
+  return 0; 
+}; 
+
+byte scfLock(){
+  
+  Settings settings;
+  readSettings(&settings); 
+  state.pin[0] = 0;
+  onUpdateSettings(&settings);
+  if (settings.pin0[0]==0) {
+    screenShow("lock error: pin not set");
+    Serial.println(F("ERROR: pin not set"));
+  } else {
+    screenShow("locked by user");
+    Serial.println(F("OK: locked"));
+  };
+  
+  return 0;  
+}; 
+
+byte doSetPin(const char *data, size_t len, byte pinNo){
+  debugPrint(F("doSetPin called."),1,1);
+  if (!unlocked()) return 1; 
+
+  //if we in mode 1 (pin = pin1): move priv1 to priv0 and set pin0; erase pin1 and priv1
+  //otherwise just set pin0 or pin1
+  Settings settings;
+  readSettings(&settings);
+
+  if (settings.mode1) {
+    memcpy(settings.privKey0,settings.privKey1,sizeof(settings.privKey0));
+    memcpy(settings.pin0,settings.pin1,sizeof(settings.pin0));
+    memset(settings.privKey1,0,sizeof(settings.privKey1));
+    memset(settings.pin1,0,sizeof(settings.pin1));
+  };
+
+  //setting pin
+  //first of all: decode it. trim by PIN_MAX_SIZE
+  
+  if (pinNo==0) {
+    //main pin
+    memset(settings.pin0,0,sizeof(settings.pin0));
+    memcpy(settings.pin0,data,len);
+  } else {
+    memset(settings.pin1,0,sizeof(settings.pin1));
+    memcpy(settings.pin1,data,len);
+  };
+
+  //now current pin is pin0. We are in normal mode.
+  memcpy(state.pin,settings.pin0,sizeof(state.pin));
+  
+  settings.mode1 = false;
+  state.lastMode1Millis = 0;
+  settings.attCounter = 0;
+  
+  writeSettings(&settings);
+  onUpdateSettings(&settings);
+
+  screenShow("The PIN was changed");
+  return 0;  
 };
 
 byte doSignMessage(const char *data, size_t len){
@@ -762,12 +1084,25 @@ byte doSignMessage(const char *data, size_t len){
   //return 1 for pin request
   if (!unlocked()) return 1; 
 
+  //<hexdata>[,<bip66padding>]
+  char *cpa = (char*)memchr(data,',',len);
+
+  bool bip66padding = false; 
+  int dataLen = len;
+  if (cpa!=NULL) {
+    bip66padding = ('0'!=cpa[1]);
+    dataLen=(cpa-data);
+  }
+
   //calc hash
-  uint8_t hash[len/2];
-  bufFromHex(data, len, hash);
+  uint8_t hash[dataLen/2];
+  bufFromHex(data, dataLen, hash);
 
   #ifdef DEBUG
-    Serial.print(F("Signing ")); hex8Serial(hash,len/2); Serial.println();
+    Serial.print(F("#Signing ")); hex8Serial(hash,dataLen/2); Serial.println();
+    if (bip66padding) Serial.println(F("#bip66padding mode"));
+    Serial.print(F("#dataLen=")); Serial.println(dataLen);
+    if (bip66padding) {Serial.print(F("#bip66padding key=")); Serial.println(cpa[1]);};
   #endif
 
   uint8_t privkey[32];
@@ -780,15 +1115,21 @@ byte doSignMessage(const char *data, size_t len){
               uECC_Curve curve);
     */ 
     uint8_t sign[64];
-    if (
-      uECC_sign(
+    byte opres = 0;
+    byte tc = 0;
+    do {
+      opres = uECC_sign(
         privkey,   //private key
         hash,  //hash
-        len/2, //hash size
+        dataLen/2, //hash size
         sign,
         curve
-      )  
-    ) {
+      );  
+      tc++;      
+    } while ( (opres) && (bip66padding) && ((sign[0]>=0x80)||(sign[32]>=0x80)) && (tc<200) );
+    
+    if ((opres)&&(tc<200))  
+    {
       hex8Serial(sign,64); Serial.println();
       screenShow("Signature made");        
     } else {
@@ -805,43 +1146,118 @@ byte doSignMessage(const char *data, size_t len){
 
 //=========================================================== main =========================================
 
+
+int xmemcmp(const __FlashStringHelper * str, const char *data, size_t len) {
+
+  if (strlen_P((PGM_P)str)>len) return -127;
+//  #ifdef DEBUG
+//    Serial.print(F("#XXXXXXXXXXXX: finding \"")); Serial.print(str); Serial.print(F("\" in ")); 
+//    for (int i=0; i<len; i++) Serial.print(data[i]);  Serial.println();
+//  #endif
+
+  return memcmp_P(data,(PGM_P)str,strlen_P((PGM_P)str));
+
+  //char d[strlen_P((PGM_P)str)+1];  d[strlen_P((PGM_P)str)]=0; memcpy(d,data,strlen_P((PGM_P)str));
+  //return strcmp_P(d,(PGM_P)str);
+
+  //int res=0;
+  //for (byte k = 0; ((k <len)&&(res==0))  ; k++) 
+  //    res = (char)pgm_read_byte_near(str + k) - (char*)data[k];  
+};
+
+//#if defined(ESP8266)
+//#else
+//#endif
+
 bool doSerialCommand(const char *data, size_t len, size_t *pinPos) {
+
+ // #ifdef DEBUG
+ //   //Serial.print(F("#doSerialCommand: len=")); Serial.print(len); Serial.print(F(" data="));  hex8Serial((uint8_t*)data,len);  Serial.println();
+ //   Serial.print(F("#doSerialCommand: len=")); Serial.print(len); Serial.print(F(" data="));  for (int i=0; i<len; i++) Serial.print(data[i]);  Serial.println();
+ // #endif
+  
   //we must set pinPos = Len if we need pin
   if (*pinPos>0) {
     //we have called with a pin
+        
     byte pinSize = len - *pinPos;
     if (pinSize>PIN_MAX_SIZE) pinSize = PIN_MAX_SIZE;
-    memcpy(state.pin,data+*pinPos,pinSize);
-    state.pin[pinSize] = 0;
+
+    if (((char *)(data+*pinPos))[0]==10) {
+      //cut \n from the beginning
+      memcpy(state.pin,data+*pinPos+1,pinSize-1);
+      state.pin[pinSize-1] = 0;       
+    } else {
+      memcpy(state.pin,data+*pinPos,pinSize);
+      state.pin[pinSize] = 0;
+    };
+
+    #ifdef DEBUG
+      Serial.print(F("["));Serial.print(state.pin);Serial.print(F("] *pinPos="));Serial.println(*pinPos,DEC);
+    #endif      
   };
 
   //if (sCmd=="HELP") scfHelp();
   //else if ((sCmd.startsWith("SETPRIVATEKEY("))&&(sCmd.endsWith(")"))) doSetPrivateKey(sCmd.substring(14,sCmd.length()-1));
   //else if ((sCmd.startsWith("TEST("))&&(sCmd.endsWith(")"))) doTest(sCmd.substring(5,sCmd.length()-1));
   size_t res = 0; 
-  if (memcmp(data,"HELP",4) ==0) res = scfHelp();
+  if (xmemcmp(F("HELP"),data,len) ==0) res = scfHelp();
+  else if (xmemcmp(F("HELLOHW"),data,len) ==0) {Serial.print(F("HELLO OPENHW v")); Serial.println(VERSION);}
+  else if (xmemcmp(F("STATUS"),data,len) ==0) res = scfStatus();
+  else if (xmemcmp(F("LOCK"),data,len) ==0) res = scfLock();
+  else if (xmemcmp(F("UNLOCK"),data,len) ==0) res = scfUnlock();  
   else if (
-     (memcmp(data,"SETPRIVATEKEY(",14) ==0)
+     (xmemcmp(F("SETPRIVATEKEY("),data,len) ==0)
      &&(memcmp(data+len-1,")",1)==0)
      ) res = doSetPrivateKey(data+14,len-15);
   //getPublicKey
-  else if (memcmp(data,"GETPUBLICKEY",12) ==0) res = doGetPublicKey();
+  else if (xmemcmp(F("GETPUBLICKEY"),data,len) ==0) res = doGetPublicKey();
   //getConfig
   else if (
-     (memcmp(data,"GETCONFIG(",10) ==0)
+     (xmemcmp(F("GETCONFIG("),data,len) ==0)
      &&(memcmp(data+len-1,")",1)==0)
      ) res = doGetConfig(data+10,len-11);  
   else if (
-     (memcmp(data,"SIGNMESSAGE(",12) ==0)
+     (xmemcmp(F("SIGNMESSAGE("),data,len) ==0)
      &&(memcmp(data+len-1,")",1)==0)
      ) res = doSignMessage(data+12,len-13);       
   else if (
-     (memcmp(data,"TEST(",5) ==0)
+     (xmemcmp(F("SETPIN("),data,len) ==0)
+     &&(memcmp(data+len-1,")",1)==0)
+     ) res = doSetPin(data+7,len-8,0);     
+  else if (
+     (xmemcmp(F("SETPIN2("),data,len) ==0)
+     &&(memcmp(data+len-1,")",1)==0)
+     ) res = doSetPin(data+8,len-9,1);          
+  else if (
+     (xmemcmp(F("TEST("),data,len) ==0)
      &&(memcmp(data+len-1,")",1)==0)
      ) res = doTest(data+5,len-6);
   else return 0;
 
-  if (res==1) *pinPos = len; //request pin
+  if (res==1) {
+    //there are 2 possible situations:
+    // 1. pin requested
+    // 2. pin failed. in this case cmdLen = 0
+    
+    if (cmdLen>0) {
+      *pinPos = len; //request pin
+      debugPrint(F("Asking for PIN."),1,1);
+      Serial.println(F("PIN: please provide your pin"));
+      setScreenStatus("ENTER PIN");
+      screenShow("Please provide PIN");
+    } else {
+      debugPrint(F("PIN failed."),1,1);
+      Serial.println(F("ERROR: incorrect pin"));
+      setScreenStatus("LOCKED");
+      screenShow("incorrect pin");      
+    };
+    return 0;
+  };
+
+  //#ifdef DEBUG
+  //  Serial.print(F("#:::: doSerialCommand success. cmdLen=")); Serial.println(cmdLen);
+  //#endif
   return 1;
 }
 
@@ -855,20 +1271,28 @@ void loop() {
  
   //cmd waiting timeout
   if ((pinPos==0) && (cmdLen>0) && ((millis() - sCmdLastRead)>SERIAL_TIMEOUT)) {
-    Serial.println(cmdLen); Serial.println(ibuf[0],HEX);
+    //Serial.println(cmdLen); Serial.println(ibuf[0],HEX);
     cmdLen = 0;
     Serial.println(F("ERROR: command awaiting timeout"));
   }
 
   //pin timeout
   if ((pinPos>0) && (cmdLen>0) && ((millis() - sCmdLastRead)>PIN_TIMEOUT)) {
+     //going to locked mode
+     setScreenStatus("LOCKED");
+     screenShow("pin entering timeout");
      cmdLen = 0;  
      Serial.println(F("ERROR: pin awaiting timeout"));
   }
   
   while (Serial.available() > 0) {
     //if (sCmd=="") sCmdBFound = 0;
-    if (cmdLen==0) {sCmdBFound = 0; pinPos = 0;}; 
+    if (cmdLen==0) {
+        sCmdBFound = 0; 
+        //if (pinPos) debugPrint(F("#*******pinPos drop*******")); 
+        pinPos = 0; 
+        //LOCKED or other state must be indicated by the procedure who cleared cmdLen
+    }; 
 
     if (cmdLen>=ibufLen) {
       while (Serial.available() > 0) Serial.read();
@@ -878,6 +1302,12 @@ void loop() {
     };
 
     ibuf[cmdLen] = char(Serial.read()); cmdLen++;
+    //just ignore \r
+    if (ibuf[cmdLen-1]==13) {
+      cmdLen--;
+      continue;
+    };
+    
     sCmdBFound = sCmdBFound || (ibuf[cmdLen-1]=='(');
     if ((!sCmdBFound) && (ibuf[cmdLen-1]>='a')&&(ibuf[cmdLen-1]<='z') && (pinPos==0)) ibuf[cmdLen-1] = ibuf[cmdLen-1] + 'A' - 'a';
 
@@ -887,15 +1317,36 @@ void loop() {
     //sCmd.toUpperCase() don't need 
     if (pinPos==0) {
       //waiting for command mode
+      //#ifdef DEBUG  
+      //Serial.print(F("# ?loop0: pinPos=")); Serial.print(pinPos); Serial.print(F(" cmdLen=")); Serial.print(cmdLen);   Serial.print(F(" ibuf[cmdLen-1]=")); Serial.println((byte)ibuf[cmdLen-1]);  
+      //#endif 
       if (doSerialCommand(ibuf,cmdLen,&pinPos)) cmdLen = 0; //it will set pinPos in case of we need pin. call it again when pin received
     } else {
-      //pin will be ended by #
-      if ((ibuf[cmdLen-1]=='#')||(ibuf[cmdLen-1]==10)) {
-        doSerialCommand(ibuf,cmdLen,&pinPos);
+      //pin will be ended by # or \n (but first \n will be ignored and must be cutted from the pin later)
+      //#ifdef DEBUG  
+      //Serial.print(F("# !loop1: pinPos=")); Serial.print(pinPos); Serial.print(F(" cmdLen=")); Serial.print(cmdLen);   Serial.print(F(" ibuf[cmdLen-1]=")); Serial.println((byte)ibuf[cmdLen-1]);  
+      //#endif 
+      if ((ibuf[cmdLen-1]=='#')|| ((ibuf[cmdLen-1]==10) &&(cmdLen!=(pinPos+1))) ) {
+        doSerialCommand(ibuf,cmdLen-1,&pinPos); //do not send # or \n
         cmdLen = 0;
+        #ifdef DEBUG
+          //Serial.print(F("# PIN entered: \""));Serial.print();Serial.println(F("\""));
+          Serial.println(F("#PIN char received"));
+        #endif  
       };
     };
-    if ((cmdLen>0) && (ibuf[cmdLen-1]==10)) cmdLen = 0; //the line was terminated but it was not correct
+
+    //cut \n for end of command or end of PIN - but only if the pin is not empty
+    //if ((cmdLen>0) && (ibuf[cmdLen-1]==10) && ((pinPos==0) || ((pinPos+1)!=cmdLen))) 
+    if ((cmdLen>0) && (ibuf[cmdLen-1]==10) && (pinPos==0)) 
+    #ifndef DEBUG  
+      cmdLen = 0; //the line was terminated but it was not correct
+    #else  
+      {
+       // Serial.print("#::::::::drop cmdLen #10end::: cmdLen=");Serial.print(cmdLen);Serial.print(" pinPos=");Serial.println(pinPos);
+        cmdLen = 0;
+      };
+    #endif
   };
 /*  
   const struct uECC_Curve_t * curve = uECC_secp160r1();

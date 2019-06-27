@@ -1,5 +1,5 @@
 //screen:
-#ifdef board_Heltec
+#if defined(board_Heltec_WiFi_Kit_8) || defined(board_Heltec_WiFi_Kit_8)
 
 #include <Arduino.h>
 #include <U8g2lib.h>
@@ -28,7 +28,11 @@ static unsigned char u8g_logo_bits[] = {
 
 //U8X8_SSD1306_128X64_NONAME_SW_I2C u8x8(/* clock=*/ 15, /* data=*/ 4, /* reset=*/ 16);
 // U8G2_SSD1306_128X64_NONAME_F_SW_I2C u8g2(U8G2_R0, /* clock=*/ 15, /* data=*/ 4, /* reset=*/ 16);
+#ifdef board_Heltec_WiFi_Kit_32
 U8G2_SSD1306_128X64_NONAME_F_SW_I2C u8g2(U8G2_R0, /* clock=*/ 15, /* data=*/ 4, /* reset=*/ 16);
+#elif defined(board_Heltec_WiFi_Kit_8)
+U8G2_SSD1306_128X32_UNIVISION_F_HW_I2C u8g2(U8G2_R0, /* reset=*/ 16, /* clock=*/ 5, /* data=*/ 4); 
+#endif
 
 char screenStatus[24] = "openHW";
 
@@ -53,13 +57,18 @@ void screenInit()
   //u8g2.sendBuffer();
   //u8g2.drawUTF8(0, 48, "Проверка AbC");
   //u8g2.setFont(u8g2_font_unifont_t_chinese1);
- 
 }
 
 void screenShow(const char *str)
 {
   u8g2.clearBuffer();
+
+  //fonts:
+  //https://github.com/olikraus/u8g2/wiki/fntlistall#u8g2-font-names
+
+  
   u8g2.setFont(u8g2_font_unifont_t_cyrillic);
+  
   //draw logo 
   u8g2.drawXBM( 0, 0, u8g_logo_width, u8g_logo_height, u8g_logo_bits);
 
@@ -73,22 +82,55 @@ void screenShow(const char *str)
   
   u8g2.drawUTF8(x, 16 , screenStatus); //4 + 12
 
-  
   //draw data
+  //different screens - different pars
+  #ifdef board_Heltec_WiFi_Kit_32
+    //128X64
+    #define mfont_h 13 //font height with space
+    #define mfont_w 8 //font width with space    
+    #define mscr_h 64 //screen height
+    #define mscr_w 128
+
+    int y = 36; x = 0;    
+  #elif defined(board_Heltec_WiFi_Kit_8)
+
+/*    
+     TWO TEXT LINES
+     
+    //128X32
+    u8g2.setFont(u8g2_font_4x6_tr);
+    #define mfont_h 6 //font height with space
+    #define mfont_w 4 //font width with space
+    #define mscr_h 32//screen height
+    #define mscr_w 128
+*/
+    
+    //128X32
+    u8g2.setFont(u8g2_font_t0_11_tf);
+    #define mfont_h 9 //font height with space
+    #define mfont_w 6 //font width with space
+    #define mscr_h 32//screen height
+    #define mscr_w 128
+    
+
+    int y = 22+mfont_h; x = 0;
+  #endif
+
+
+  
   //first line is 24, step 12
   //go to next line on \n or limit 128/8=16 symbols
   l =  strlen(str);
-  int y = 36; x = 0;
   if (l>0)
     for (int i=0; true; i++) {
-      if (str[i]==10) {y = y + 13; x = 0;}
+      if (str[i]==10) {y = y + mfont_h; x = 0;}
       else {
         char tmp[2] = "x"; tmp[0] = str[i];
         u8g2.drawStr(x, y, tmp);
-        x += 8;
-        if (x>120) {y = y + 13; x = 0;};
+        x += mfont_w;
+        if (x>(mscr_w-mfont_w)) {y = y + mfont_h; x = 0;};
       };
-      if ((y>64) || (i>=l)) break;
+      if ((y>mscr_h) || (i>=l)) break;
     };
     
   
