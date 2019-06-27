@@ -1,5 +1,5 @@
 //screen:
-#if defined(board_Heltec_WiFi_Kit_8) || defined(board_Heltec_WiFi_Kit_8)
+#if defined(board_Heltec_WiFi_Kit_8) || defined(board_Heltec_WiFi_Kit_32)
 
 #include <Arduino.h>
 #include <U8g2lib.h>

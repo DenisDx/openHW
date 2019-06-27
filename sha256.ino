@@ -158,13 +158,13 @@ void sha256_final(SHA256_CTX *ctx, uint8_t hash[]) {
     hash[i + 28] = (ctx->state[7] >> (24 - i * 8)) & 0x000000ff;
   }
 }
-
+/* //D
 char *btoh(char *dest, uint8_t *src, int len) {
   char *d = dest;
   while( len-- ) sprintf(d, "%02x", (unsigned char)*src++), d += 2;
   return dest;
 }
-/* //D
+
 String SHA256Str(String data) 
 {
   uint8_t data_buffer[data.length()];

@@ -44,7 +44,7 @@ http://tqfp.org/stm32/zashita-ot-schityvaniya-proshivki-stm32.html
 //#define board_Heltec_WiFi_Kit_32
         //use WiFi_Kit_32 board for https://dl.espressif.com/dl/package_esp32_index.json  library
 
-#define board_Heltec_WiFi_Kit_8  
+//#define board_Heltec_WiFi_Kit_8  
          //= HTIT-W8266 //https://heltec.org/project/wifi-kit-8/  //library: In the Arduino IDE, in the Tools > Board menu choose  //choose board: NodeMCU 1.0 (ESP-12E Module)
          //alternative from Heltec:   https://github.com/Heltec-Aaron-Lee/WiFi_Kit_series/releases/download/0.0.1/package_heltec_esp8266_index.json  ; board name Wifi_Kit_8
 
@@ -64,11 +64,14 @@ http://tqfp.org/stm32/zashita-ot-schityvaniya-proshivki-stm32.html
 //THIS IS THE END OF THE SETTINGS.
 #define uECC_OPTIMIZATION_LEVEL 3
 // #pragma GCC optimize ("-O0")
+#ifdef __AVR__
+  #pragma GCC optimize ("-Og")  //we must do it for memory saving
+#endif
 // #pragma GCC diagnostic warning "-fpermissive"
 // #pragma message ("DO NOT FORGET TO REVIEW FIRMWARE SETTINGS")
 
 //==============================================================================================================================
-#define VERSION F("0.2")
+#define VERSION F("0.3")
 
 //============================================================== Includes  =====================
 #include <types.h>
@@ -93,6 +96,8 @@ uint32_t crc32b(const unsigned char *message, size_t len) {
    uint32_t b, crc, mask;
 
    crc = 0xFFFFFFFF;
+   //memset(&crc,0xFF,sizeof(crc));
+   
    for (int i=0; i<len; i++){
       b = message[i];               // Get next byte.
       crc = crc ^ b;
@@ -251,12 +256,12 @@ const PROGMEM char TEST_KEY_1[] = {"cNpjQkzqzoEvgg1GhHQ7JY2cNjh97rhqS1wDH3m7EDnB
 
 #ifdef DEBUG
 void debugPrint(const __FlashStringHelper * str, bool newline=true, bool printMem=false) {
-  Serial.print("#");Serial.print(str);Serial.print(F(" "));
+  Serial.print(F("#"));Serial.print(str);Serial.print(F(" "));
   if (printMem) printMemory(false); 
   if (newline) Serial.println();
 };
 #else
-  #define debugPrint(x)
+  #define debugPrint(x, ...)
 #endif
 //===================================================================================================================================================
 //---------------------------decode options-----------------------------------------------------
@@ -316,7 +321,7 @@ const struct uECC_Curve_t * curve = uECC_secp256k1();
 //const struct uECC_Curve_t * curve = uECC_secp160r1();
 
 State state;
-Settings *ptrSettings = 0;
+//Settings *ptrSettings = 0;
 
 
 //input buf data
@@ -489,8 +494,10 @@ void setup() {
 }
 
 
+//byte __attribute__ ((noinline))  scfStatus() {
 byte scfStatus() {
   //(EMPTY/LOCKED/UNLOCKED/NOPIN)
+  debugPrint(F("scfStatus called."),1,1);
   Settings settings;
   readSettings(&settings); 
 
@@ -548,6 +555,7 @@ byte scfHelp() {
   //for (byte k = 0; k < strlen_P(helpMessages[i]); k++)  Serial.print(pgm_read_byte_near(helpMessages + k));  
 */  
   Serial.print(F("openHW "));Serial.println(VERSION);
+  
   Serial.print(F("help : show this text\n"));
   Serial.print(F("setPrivateKey(<private1>[,<private2>]) : sets private key(s). Data in code58check form.\n"));
   Serial.print(F("  it will erase all privateKeys and set all pins to "".\n"));
@@ -615,55 +623,10 @@ byte scfHelp() {
   Serial.print(F("  WARNING: There is no way to tell the right password from the wrong one\n"));
   Serial.print(F("  Any password will be accepted, but the private key will be different from the specified one.\n"));  
   Serial.print(F("  Use getPublicKey for determine private key correctness\n"));    
-};
-
-//=========================================================== cmd functions ================================
-byte doTest(const char *data, size_t len) {
-  //return 1 for pin request
-  Serial.println(F("-----------------------------------------------------------------------------------------"));
-  Serial.print(F("TEST called: ")); for (int i=0; i<len; i++) Serial << (char)data[i]; Serial.println();
-
- 
- if ((len==1)&&(memcmp(data,"1",1))==0)  {  //"1"
-   Serial.println(F("----- TEST 1: 100 times doSetPrivateKey(\"cNpjQkzqzoEvgg1GhHQ7JY2cNjh97rhqS1wDH3m7EDnB1T5hrB5D\") -----"));
-   for (int i=0; i<100; i++) {
-     Serial.print(i); Serial.print(F(": "));
-     char tmps[54];
-     getProgmemStr(TEST_KEY_1,tmps); doSetPrivateKey(tmps,52);
-   };  
- } else {
-  #ifdef SHA256_SUPPORTED
-    /*
-    int l=str.length();
-    if (l>64) l=64;
-    byte arr[64];
-    for (int i=0; i<l; i++) arr[i] = str.c_str()[i];
-    //test(gggggggggfffffffffffffffffffffffffffffffffg) 
-    Serial.print("data=");  for (int i=0; i<l; i++) {Serial.print(arr[i],HEX); Serial.print(" ");};  Serial.println(" ");
-    for (int v=0; v<10; v++) {
-      uint8_t hash[32];
-      SHA256(arr,l,hash);
-      Serial.print(v); 
-      Serial.print(": hash="); for (int i=0; i<32; i++) {Serial.print(hash[i],HEX); Serial.print(" ");};  Serial.println(" ");
-      //SHA256(hash,32,hash);  
-    };
-    */
-    Serial.print(F("data="));  for (int i=0; i<len; i++) {Serial.print(data[i],HEX); Serial.print(F(" "));};  Serial.println(F(" "));
-    for (int v=0; v<100; v++) {
-      uint8_t hash[32];
-      SHA256((uint8_t*)data,len,hash);
-      Serial.print(v); 
-      Serial.print(F(": hash=")); for (int i=0; i<32; i++) {Serial.print(hash[i],HEX); Serial.print(F(" "));};  Serial.println(F(" "));
-      //SHA256(hash,32,hash);  
-    };
-    
-  #else
-    Serial.println(F("SHA256_SUPPORTED is turned off"));
-  #endif    
- }; 
   
 };
 
+//=========================================================== cmd functions ================================
 //for saving memory:
 size_t checkAndDecodePrivateKey(const char *data, size_t len, uint8_t *result) { //res must be 32 bytes
   debugPrint(F("checkAndDecodePrivateKey called."),1,1);
@@ -684,12 +647,12 @@ size_t checkAndDecodePrivateKey(const char *data, size_t len, uint8_t *result) {
     //check crc
     #ifdef SHA256_SUPPORTED
       uint8_t hash[32];
-      Serial.print(F("Ready to calc SHA256. "));printMemory();
+      Serial.print(F("#Ready to calc SHA256. "));printMemory();
       if (!checkMemory(350)) return -1;
       SHA256(res,34,hash);
       SHA256(hash,32,hash);
-      Serial.print(F("SHA256 calculated. "));printMemory();
-      Serial.print(F("hash=")); for (int i=0; i<32; i++) {Serial.print(hash[i],HEX); Serial.print(F(" "));};  Serial.println(F(" "));      
+      Serial.print(F("#SHA256 calculated. "));printMemory();
+      Serial.print(F("#hash=")); for (int i=0; i<32; i++) {Serial.print(hash[i],HEX); Serial.print(F(" "));};  Serial.println(F(" "));      
       for (int i=0; i<4; i++) if (hash[i]!=res[34+i]) {
         Serial.println(F("ERROR: Private key not assigned: wrong crc"));
         screenShow("ERROR: wrong crc");
@@ -744,9 +707,11 @@ void savePrivateKey(const uint8_t *data,byte n){
   onUpdateSettings(&settings);
 };
 
+//byte __attribute__ ((noinline)) doSetPrivateKey(const char *data, size_t len) {  --> use -Og... this is not working
 byte doSetPrivateKey(const char *data, size_t len) {
   //return 1 for pin request
   //if (!unlocked()) return 1;  ->We don't need it to set pins
+  //debugPrint(F("doSetPrivateKey called."),1,1);
   #ifdef DEBUG
     Serial.print(F("#Set private key: ")); for (int i=0; i<len; i++) Serial.print((char)data[i]); Serial.println(); printMemory();
   #endif  
@@ -796,12 +761,21 @@ byte doSetPrivateKey(const char *data, size_t len) {
  }
 };
 
+//#if defined(ESP8266) || defined(ESP31B) || defined(ESP32)
  void doDelay(unsigned long ms) {
+    //#if defined(ESP31B) || defined(ESP32)
+    //wdt_disable();
+    //#endif
     for (unsigned long i=(ms/100); i>0; i--) {
       delay(100); 
-      wdt_reset();
+      #ifdef ESP8266
+        wdt_reset();
+      #endif  
       //delay(1);
     };  
+    //#if defined(ESP31B) || defined(ESP32)
+    //wdt_enable(0);
+    //#endif    
   /*
     wdt_disable();
     delay(ms);
@@ -849,7 +823,7 @@ void unlockedSuccess(Settings *settings){
   if (settings->askPinEveryTime) state.pin[0] = 0;
 };
 
-
+//bool __attribute__ ((noinline)) unlocked() 
 bool unlocked() 
 //returns if the 
 // INCREASES ATTEMPT COUNTER AND MAKES DELAY
@@ -1144,6 +1118,51 @@ byte doSignMessage(const char *data, size_t len){
   return 0;
 }
 
+byte doTest(const char *data, size_t len) {
+  //return 1 for pin request
+  Serial.println(F("-----------------------------------------------------------------------------------------"));
+  Serial.print(F("TEST called: ")); for (int i=0; i<len; i++) Serial << (char)data[i]; Serial.println();
+
+ 
+ if ((len==1)&&(memcmp(data,"1",1))==0)  {  //"1"
+   Serial.println(F("----- TEST 1: 100 times doSetPrivateKey(\"cNpjQkzqzoEvgg1GhHQ7JY2cNjh97rhqS1wDH3m7EDnB1T5hrB5D\") -----"));
+   for (int i=0; i<100; i++) {
+     Serial.print(i); Serial.print(F(": "));
+     char tmps[54];
+     getProgmemStr(TEST_KEY_1,tmps); doSetPrivateKey(tmps,52);
+   };  
+ } else {
+  #ifdef SHA256_SUPPORTED
+    /*
+    int l=str.length();
+    if (l>64) l=64;
+    byte arr[64];
+    for (int i=0; i<l; i++) arr[i] = str.c_str()[i];
+    //test(gggggggggfffffffffffffffffffffffffffffffffg) 
+    Serial.print("data=");  for (int i=0; i<l; i++) {Serial.print(arr[i],HEX); Serial.print(" ");};  Serial.println(" ");
+    for (int v=0; v<10; v++) {
+      uint8_t hash[32];
+      SHA256(arr,l,hash);
+      Serial.print(v); 
+      Serial.print(": hash="); for (int i=0; i<32; i++) {Serial.print(hash[i],HEX); Serial.print(" ");};  Serial.println(" ");
+      //SHA256(hash,32,hash);  
+    };
+    */
+    Serial.print(F("data="));  for (int i=0; i<len; i++) {Serial.print(data[i],HEX); Serial.print(F(" "));};  Serial.println(F(" "));
+    for (int v=0; v<100; v++) {
+      uint8_t hash[32];
+      SHA256((uint8_t*)data,len,hash);
+      Serial.print(v); 
+      Serial.print(F(": hash=")); for (int i=0; i<32; i++) {Serial.print(hash[i],HEX); Serial.print(F(" "));};  Serial.println(F(" "));
+      //SHA256(hash,32,hash);  
+    };
+    
+  #else
+    Serial.println(F("SHA256_SUPPORTED is turned off"));
+  #endif    
+ }; 
+  
+};
 //=========================================================== main =========================================
 
 
@@ -1171,6 +1190,7 @@ int xmemcmp(const __FlashStringHelper * str, const char *data, size_t len) {
 
 bool doSerialCommand(const char *data, size_t len, size_t *pinPos) {
 
+  if (data[0]==10) debugPrint(F("doSerialCommand called data[0]=\\n."),1,1);
  // #ifdef DEBUG
  //   //Serial.print(F("#doSerialCommand: len=")); Serial.print(len); Serial.print(F(" data="));  hex8Serial((uint8_t*)data,len);  Serial.println();
  //   Serial.print(F("#doSerialCommand: len=")); Serial.print(len); Serial.print(F(" data="));  for (int i=0; i<len; i++) Serial.print(data[i]);  Serial.println();
@@ -1201,11 +1221,14 @@ bool doSerialCommand(const char *data, size_t len, size_t *pinPos) {
   //else if ((sCmd.startsWith("SETPRIVATEKEY("))&&(sCmd.endsWith(")"))) doSetPrivateKey(sCmd.substring(14,sCmd.length()-1));
   //else if ((sCmd.startsWith("TEST("))&&(sCmd.endsWith(")"))) doTest(sCmd.substring(5,sCmd.length()-1));
   size_t res = 0; 
+  
   if (xmemcmp(F("HELP"),data,len) ==0) res = scfHelp();
+ 
   else if (xmemcmp(F("HELLOHW"),data,len) ==0) {Serial.print(F("HELLO OPENHW v")); Serial.println(VERSION);}
   else if (xmemcmp(F("STATUS"),data,len) ==0) res = scfStatus();
   else if (xmemcmp(F("LOCK"),data,len) ==0) res = scfLock();
   else if (xmemcmp(F("UNLOCK"),data,len) ==0) res = scfUnlock();  
+
   else if (
      (xmemcmp(F("SETPRIVATEKEY("),data,len) ==0)
      &&(memcmp(data+len-1,")",1)==0)
@@ -1254,11 +1277,12 @@ bool doSerialCommand(const char *data, size_t len, size_t *pinPos) {
     };
     return 0;
   };
-
+ 
   //#ifdef DEBUG
   //  Serial.print(F("#:::: doSerialCommand success. cmdLen=")); Serial.println(cmdLen);
   //#endif
   return 1;
+ 
 }
 
 void loop() {
@@ -1339,14 +1363,15 @@ void loop() {
     //cut \n for end of command or end of PIN - but only if the pin is not empty
     //if ((cmdLen>0) && (ibuf[cmdLen-1]==10) && ((pinPos==0) || ((pinPos+1)!=cmdLen))) 
     if ((cmdLen>0) && (ibuf[cmdLen-1]==10) && (pinPos==0)) 
-    #ifndef DEBUG  
+    #ifndef DEBUGxxxxxx
       cmdLen = 0; //the line was terminated but it was not correct
     #else  
       {
-       // Serial.print("#::::::::drop cmdLen #10end::: cmdLen=");Serial.print(cmdLen);Serial.print(" pinPos=");Serial.println(pinPos);
+       Serial.print(F("#::::::::drop cmdLen #10end::: cmdLen="));Serial.print(cmdLen);Serial.print(F(" pinPos="));Serial.println(pinPos);
         cmdLen = 0;
       };
     #endif
+    if (cmdLen==0) debugPrint(F("main loop cmdLen==0."),1,1);
   };
 /*  
   const struct uECC_Curve_t * curve = uECC_secp160r1();

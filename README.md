@@ -1,4 +1,4 @@
-openHW project 0.1
+openHW project 0.3
 =================
 Open hardware wallet. Supports Arduino AVR / ESP/ STM chips (atmega328 included), Emercoin / Bitcoin / Ethereum etc compatible
 
@@ -78,6 +78,10 @@ for sha256 hashing used https://github.com/kamaljohnson/Arduino-SHA256/ (with mo
 This "Software" is Licensed Under  **`MIT License (MIT)`** .
 
 ##Version history
+
+0.3
+minor changes
+arduino memory problem solved (-Og added... this is only way)
 
 0.2
 Fully functional (?). 
