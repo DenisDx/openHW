@@ -1,7 +1,6 @@
 openHW project 0.3
 ==================
 Open hardware wallet. Supports Arduino AVR / ESP/ STM chips (atmega328 included), Emercoin / Bitcoin / Ethereum etc compatible
-щуз
 
 Made by Denis
 https://github.com/DenisDx/openHW/blob/master/LICENSE
@@ -11,7 +10,7 @@ The code is based on a number of libraries listed in the corresponding section o
 
 The project is being developed with the support of the Emer community as a part of the Emer's infrastructure
 
-#Abstract
+##Abstract
 openHW is an open-sourse free-licensed project aimed at developing a universal hardware wallet code that supports a wide range of computer chips (including the weakest ones) as well as a wide range of popular boards
 The main emphasis is on the simplicity of program code integration, simplicity of building and configuring.
 However, the cryptography used to preserve sensitive data is strong enough to ensure the security of the data at an industrial level if the wallet used correctly.
@@ -22,7 +21,7 @@ An alternative is to buy a device specially designed for use with this firmware,
 *This important point provides the user with sufficient assurance that the device does not have built-in backdoors allowing the attacker who sold it to gain access to sensitive information.*
 We believe that only open-source firmware and self-flashing on independent devices can provide sufficient security guarantees today.
 
-#How to use
+##How to use
 The ready-to-use device with firmware is connected to a computer or smartphone (hereinafter - the Host) via USB cable or via Bluetooth (if supported by the choosen board)
 
 Host must have openHW-compatible software installed (e.g. EmerAPI KeyKeeper app).
