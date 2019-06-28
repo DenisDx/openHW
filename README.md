@@ -3,7 +3,7 @@ openHW project 0.3
 Open hardware wallet. Supports Arduino AVR / ESP/ STM chips (atmega328 included), Emercoin / Bitcoin / Ethereum etc compatible
 
 Made by Denis
-https://github.com/DenisDx/openHW/blob/master/LICENSE
+https://github.com/DenisDx/openHW
 
 I welcome the use of this code, or parts of it, in any application that enhances the security and privacy of users. Feel free to ask questions.
 The code is based on a number of libraries listed in the corresponding section of this document.
@@ -72,7 +72,7 @@ This is either a data string (with an answer to a request) or a string starting 
 More detailed information on the commands can be obtained by sending the command "help" to the device
 The default port speed is 115200
 
-## Plausible denial (PD) scheme
+## Plausible deniability (PD) scheme
 In order to protect the user from the violent demand for a PIN code (from criminals or public authorities), a second private key (PD Private Key) and a second PIN code (pin2) support is provided
 If the criminals force require access to the device, the user disclosures the PD pin (pin 2)
 
