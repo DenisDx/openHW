@@ -18,8 +18,9 @@ However, the cryptography used to preserve sensitive data is strong enough to en
 One of the scenarios for using this code is when the end user buys the device compatible with the code and flashes it himself.
 An alternative is to buy a device specially designed for use with this firmware, but with the subsequent flashing of the code by the user himself.
 
-*This important point provides the user with sufficient assurance that the device does not have built-in backdoors allowing the attacker who sold it to gain access to sensitive information.*
-We believe that only open-source firmware and self-flashing on independent devices can provide sufficient security guarantees today.
+**This important point provides the user with sufficient assurance that the device does not have built-in backdoors allowing the attacker who sold it to gain access to sensitive information.**
+
+*We believe that only open-source firmware and self-flashing on independent devices can provide sufficient security guarantees today.*
 
 # How to use
 The ready-to-use device with firmware is connected to a computer or smartphone (hereinafter - the Host) via USB cable or via Bluetooth (if supported by the choosen board)
