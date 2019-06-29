@@ -1,4 +1,4 @@
-openHW project 0.3
+openHW project 0.4
 ==================
 Open hardware wallet. Supports Arduino AVR / ESP/ STM chips (atmega328 included), Emercoin / Bitcoin / Ethereum etc compatible
 
@@ -94,7 +94,7 @@ Using a password (in addition to the pin, computer + device mode) solves the pro
 
 2. Chips that are most vulnerable to physical hacking
 Protecting the memory of some chips at the moment can be easily hacked by physically exposing the chip 
-(costs around #1000 with 50% chance of success)
+(costs around USD$1000 with 50% chance of success)
 Storing your private keys on these chips is comparable in security to storing paper with a password in a locked box.
 If this chip is stolen, all assets should be immediately transferred to another private key and the old one should not be used.
 Below is a list of unsafe chips:
@@ -106,45 +106,192 @@ Chips that are not known to be unsafe at the time of writing this document:
 ESP32
 ESP8256
 
-# How to compile
+# How to compile 
+First, you should purchase any board with an avr/stm/esp chip board supported by the Ardiuno development environment.
+It can be implemented as a USB token, a separate board or otherwise. 
+I recommend using ESP chips (esp32, esp8266)
+It will be easier if you choose a board on which the firmware has already been tested. The list is given at the beginning of the main firmware file openHW.ino
+In this case you just need to uncomment (remove "//" from the beginnig) on the line corresponding to your board.
+For example, if you purchase a Heltec WiFi Kit 32 board (https://heltec.org/project/wifi-kit-32/)
+you will need to change line "//#define board_Heltec_WiFi_Kit_32" to "#define board_Heltec_WiFi_Kit_32", removing firts two symbols
+
+this test is also repeated in openHW.ino file
+
 1. Intall Ardino board framework
   https://www.arduino.cc/en/Main/Software
 2. Install additional libraries for you board:
   Go to File > Preferences : Enter library json URL into the “Additional Board Manager URLs” and click "ok"
   * arduino (or compatible board): do not need to intall additional libraries 
   * esp8266: http://arduino.esp8266.com/stable/package_esp8266com_index.json 
-  * esp32 (Heltek web kit) : https://dl.espressif.com/dl/package_esp32_index.json
-  
-  
+  * esp32 (Heltek web kit) : https://dl.espressif.com/dl/package_esp32_index.json  
+  * etc (see your board manual)
   if you wish to work with different boadrs, you can set mutily urls like 
     https://dl.espressif.com/dl/package_esp32_index.json, http://arduino.esp8266.com/stable/package_esp8266com_index.json
-  
-3. Install additional libraries for the script
-   install micro-ecc library: go to Sketch=>Include Library=>Manage Libraries; find uECC library and install it
-   For arm arduino (for example, arduino UNO) you must modify intalled micro-ecc library: 
-     change "define uECC_SUPPORT_COMPRESSED_POINT 1" to "define uECC_SUPPORT_COMPRESSED_POINT 0" in uECC.c
-   for STM or ESP boadrs it is not needed to make any changes (but you can do it if you wish)
-
-4. Configure your board.
-   open the project.  Open "openHW.ino" file. go to the "FIRMWARE SETTINGS" section (it is on the beginnig of the file)
-   and uncomment the row with your board 
-   (for example, if you board is Heltec ESP32 you should delete "//" in the line "//#define board_Heltec")
-   if you can't find your board in the list, do not uncomment any lines. 
+3. install micro-ecc library: go to Sketch=>Include Library=>Manage Libraries; find uECC library and install it
+4. Perform additional steps (you should restart arduino application after the changes): 
+   ---For AVR (Arduino UNO, etc):---
+   A.1. change #define uECC_SUPPORT_COMPRESSED_POINT 1 to #define uECC_SUPPORT_COMPRESSED_POINT 0 in uECC.h
+   A.2. make modification to the board's settings for protect the memory and increase buffer size:
+      1) locate your arduino directory (in windows, it is C:\Program Files\arduino...)              
+      2) copy the core directory <base Arduino folder>\hardware\arduino\avr\cores\arduino to a different name, for example 
+         <base Arduino folder>\hardware\arduino\avr\cores\arduinohw
+      3) edit the hardware serial file in the new folder. It could be called HardwareSerial.h or USBAPI.h depends on version
+         you must add two lines on the beginning:
+           #define SERIAL_TX_BUFFER_SIZE 129
+           #define SERIAL_RX_BUFFER_SIZE 150
+      4) open <base Arduino folder>\hardware\arduino\cores\arduino\avr\boards.txt
+         find your board (for example, Arduino UNO) (the section will be started from "uno.name=Arduino Uno")
+         copy the whole section and rename all preffixes to the new one for example, "uno" -> "unohw"
+         change in the new section:
+         1: .name parameter (for example, "uno.name=Arduino Uno" will be "unohw.name=Arduino HW"
+         2: .build.core change to the folder you created before (for example, "uno.build.core=arduino" will be "unohw.build.core=arduinohw")
+5. Now let's make changes in the main file
+   5.1. Set your board in FIRMWARE SETTINGS section in the openHW.ino file. 
+        (for example, if you board is Heltec ESP32 you should delete "//" in the line "//#define board_Heltec")
+        If your board is not listed, you should configure it below in the boards ection or do nothing (screen and buttons will not work in this case)
+   5.2. Make sure that DEBUG option is turned off if you are not a developer.     
+        This is in the second section right after the board selection.
+        if you see the row "#define DEBUG 1" - change it to "//#define DEBUG 1"
+        otherwise it will be possible to see your private keys just using command getConfig()
    
-5. Connect you board
-   for some boards you need some additional procedures before flashing
+6. Connect your board. Select COM port and your board type in Tools menu. If you created a new platfor (recommended) you have to choose it.
 
-6. Setup your board
-	Open Arduino gui
-	Select your board in the "tools" section. Select corrrect COM port
+7. Press arrow (flash) button to flash the board.
+
+8. Check if firmware works
+
+9. Protect EEPROM memory data from firmware changes (and do other protection thinks)
+ ---For AVR (Arduino UNO, etc):---
+    A: You will need an additional device to make less or more good protection. It costs less than usd$1
+    first, you have to set EESAVE = 1 (off, there 1 means off) to prevent EEP reading using a changed firmware
+    second, it would be a good to change DWEN, SPIEN and RSTDSBL (or only DWEN and RSTDSBL) bits.
+       DWEN = 1(off); SPIEN=1(off);  RSTDSBL = 0 (on). The last two options will make firmware updating impossible
+
+    For most of the available Arduino boards this point can be omitted (the system security will be reduced, be sure to use the Password, 
+    if you lose the key - remove the paring on the host with it), because by default the memory cleaning when flashing is enabled  and debugging is disabled.
+    You can easily check this by flashing the device, setting a private key and flashing it again. 
+    If the private key is disappeared and the key returns to the uninitialized state - that's okay, changing EESAVE bit is not required.
+
+    if you not pass this step you private key can be read from the chip easily
+    BE VERY CAREFUL HERE, YOU CAN BRICK YOUR BOARD
+    universal calculator: http://www.engbedded.com/fusecalc/
+
+    A partial solution may be to buy a board with the EESAVE flag sets to 1 (off). It is a default value for many boards.
+    In this case if intruders wants to read your key he must at least disassembly device and use additional equipment.
+    DWEN is usually turned off (1) by default.
 	
-7. Flash the firmware	
+#Protocol usage example 
+  *this test is also repeated in openHW.ino file*
+  ">>" means we send the text to the device (do not type ">" symbol itself
+  "<<" means the device's answer (do not type "<" symbol itself
+  You can communication with the device using text commands, which can be ended by a line feed character or be sent by a solid stream.
+  the device's answers will be ended with \n char
+  
+  the device port will be COMnn (for example, COM5) on windows, ttySnn or ttyUSBnn on linux/unix (depends on board)
+  the default speed is 115200; 8 N 1
+  
+  The following examples use Emer (Emercoin) address formats, but this will also work with Bitcoin or Ethereum addresses (and others)
+  
+## Checking connection
+*use it for check if you are connected to the device*
 
-8. Set board fuses to protect it from JTAG reading / for EPPROM erasing
-This is a very important part of the process. If you don't do it, it will be easy for intruders to get your private keys from the device.
-If the process fails at this stage, you can brick your device. Be careful.
+>>helloHW
+<<HELLO OPENHW v0.4
 
-9. Use with pleasure!
+*The result must be started from "HELLO OPENHW" string*
+  
+## Initial setup:
+*first, we have to set up private key(s). In this example we will set the both main and PD private keys.*
+*You can perform this procedure on a device that has just been programmed or on a device that is already set up (it will be reset)*
+
+>>setPrivateKey(KxTjwqzzZjYfXEY1JsaywDXYkWPjTQc9MynkAdJbj78Aki4b9wEg,L3VdUrEEAeKwvyxZ81XkVxBGwiM5QxTXuUrrMJcr4pN6u8hV37om)
+<<OK: Both keys were assigned
+
+*This command sets the main Private Key of the KxTjwqzzZjYfXEY1JsaywDXYkWPjTQc9MynkAdJbj78Aki4b9wEg 
+  *(this key corresponds to the master password of the KeyKeeper program "1" s/0/0 HD and to the address EMYEfuf21PyEt4GfBpoZkEWhaQNAW6GXQR)* 
+  *and PD Private Key L3VdUrEEAeKwvyxZ81XkVxBGwiM5QxTXuUrrMJcr4pN6u8hV37om (Master Password "2", EYjzaPvKAxCfVvztLFv2s4qqYhyf1F9NVB)*
+*for bitcoin and default electrum BIP39 salt ("mnemonic") it will be the same:*
+*setPrivateKey(KzXvca32X4NaxNcKYAQ6iduf3PRZsAezLczPLvfHu96jw7jjTB5D,KxwtfCyJJfFkZSSjSP67F8ejRZQYZExRAZmznbKxC9z9MNsAhVMh)*
+*for addresses 1Fdy5g8mG1sGmQb39HhAYSTjYpfHztouFh and 13W9cELWjSd6bHstr4hkmyhGZ26r46rKKy*
+
+*So, the two private keys - the main one and the one to be provided under the forcible demand - are set. Now you need to set the PIN codes:*
+*set main pin: 9876*
+
+>>setPin(9876)
+<<OK: PIN has been set up
+
+*ok. now let set PD pin: 123*
+>>setPin2(123)
+<<OK: PIN has been set up
+
+*ok, the initialization has been done. Was it difficult?*
+**WARNING: DO NOT USE KEYWALK PINS LIKE 1234, 7654 or your DOB**
+
+## Retrieving the Public Key and determining address:
+*Getting the current address is easy, just run the getPublicAddress command *
+*If the device has been locked, you will need to enter the PIN.*
+
+>>getPublicKey
+<<BAB1473EED46A7266430CFA69F48184481B0D3B30DF9964CF9E3055D230B9D5B6817D514B7ED40F0DB48A721AE2C5DF301EE8066263237B42F506932958A4CB0
+
+*the key is uncompressed. For determine the address, we must comress it first:*
+*the compressed will be 02BAB1473EED46A7266430CFA69F48184481B0D3B30DF9964CF9E3055D230B9D5B . We just drop second part (Y coord) of the key and add 02 because Y is odd*
+* now calculate RipeMD160(sha256(02BAB1473EED46A7266430CFA69F48184481B0D3B30DF9964CF9E3055D230B9D5B)) = 3019A9CD558E4F9A3E197A1D7DF5BEF71522BBA2 *
+* add network signature (0x21 for Emercoin): we get 213019A9CD558E4F9A3E197A1D7DF5BEF71522BBA2 *
+* convert it to the code58check encoding: we get EMYEfuf21PyEt4GfBpoZkEWhaQNAW6GXQR*
+
+## Signing transactions
+*First of all, the application on the host must calculate hash to sign.*
+*This must be done one by one for each TX input that requires a signature.*
+*Next, the resulting hash is passed to the device using the signMessage(<hashtosign>[,<signtx>]) command.*
+
+>>signMessage(E3FFCC983D047EAB781C31AFA21B71AD15393C3B3EBD9944F278652F85E18266,1)
+<<0589B5F4E91C0E2B9C0767BF9ECAA7E9993C8663823029DF6C4D345EEBF8B175169C75B1BCED40C11B187B6B751062A15065DEA1EFD26FF8421B5335D9E9ABA9
+
+*The result is the Input signature (R and S). You can conver it into DER format yourself.*
+
+## Other operations
+*-------changing PD PIN-------*
+*now let set PD pin: 123. Setting the PIN2 requires the main PIN to be entered, which will be requested*
+>>setPin2(123)
+<<PIN: please provide your pin
+
+*An important remark. We could have avoided the second iteration of the PIN entering by introducing the PIN right after the command. Then we would have to enter just "setPin2(123)9876".*
+*If the device had been unlocked, no PIN entry would have been required.*
+*ok. enter the pin:*
+
+>>9876
+<<OK: PIN has been set up
+
+*ok, done*
+
+*-------just unlock the device with pin 9876-------*
+>>unlock9876
+<<OK: locked
+
+*-------unlock the locked device in the dialog-------*
+>>unlock
+<<PIN: please provide your pin
+>>9876
+<<OK: unlocked
+
+*-------lock it-------*
+>>lock
+<<OK: locked
+
+*-------get settings-------*
+>>getConfig()
+>>OK: openHW configuration:
+>>Name:
+>>Ask pin every time:0
+>>Lock pin after (ms):0
+>>Button mode: use only for unlock pin
+>>WIF:EF
+>>Sig:21
+
+*-------get current device state-------*
+>>status
+<<UNLOCKED
 
 # Dependencies
 arduino libraries
@@ -157,6 +304,15 @@ This "Software" is Licensed Under  **`BSD 2-Clause "Simplified" License`** .
 
 # Version history
 
+0.4
+solved buffer problem on AVR
+ECDH added
+manuals improved 
+bugs fixed
+TODO:
+  - Password support
+  - setPinMode, setPinLockDelay, setButtonMode support
+  
 0.3
 minor changes
 arduino memory problem solved (-Og added... this is only way)

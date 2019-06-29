@@ -2,42 +2,80 @@
 /*
 openHW project (?) Denis
 https://github.com/DenisDx/openHW
-
-
 /*----------------------------------------------------------------------------------
-HOW TO USE
-1. For AVR (Arduino UNO, etc): change #define uECC_SUPPORT_COMPRESSED_POINT 1 to #define uECC_SUPPORT_COMPRESSED_POINT 0 in uECC.h
-2. Set your board in FIRMWARE SETTINGS section 
+#HOW TO BUILD AND FLASH
+1. Intall Ardino board framework
+  https://www.arduino.cc/en/Main/Software
+2. Install additional libraries for you board:
+  Go to File > Preferences : Enter library json URL into the “Additional Board Manager URLs” and click "ok"
+  * arduino (or compatible board): do not need to intall additional libraries 
+  * esp8266: http://arduino.esp8266.com/stable/package_esp8266com_index.json 
+  * esp32 (Heltek web kit) : https://dl.espressif.com/dl/package_esp32_index.json  
+  * etc (see your board manual)
+  if you wish to work with different boadrs, you can set mutily urls like 
+    https://dl.espressif.com/dl/package_esp32_index.json, http://arduino.esp8266.com/stable/package_esp8266com_index.json
+3. install micro-ecc library: go to Sketch=>Include Library=>Manage Libraries; find uECC library and install it
+4. Perform additional steps (you should restart arduino application after the changes): 
+   ---For AVR (Arduino UNO, etc):---
+   A.1. change #define uECC_SUPPORT_COMPRESSED_POINT 1 to #define uECC_SUPPORT_COMPRESSED_POINT 0 in uECC.h
+   A.2. make modification to the board's settings for protect the memory and increase buffer size:
+      1) locate your arduino directory (in windows, it is C:\Program Files\arduino...)              
+      2) copy the core directory <base Arduino folder>\hardware\arduino\avr\cores\arduino to a different name, for example 
+         <base Arduino folder>\hardware\arduino\avr\cores\arduinohw
+      3) edit the hardware serial file in the new folder. It could be called HardwareSerial.h or USBAPI.h depends on version
+         you must add two lines on the beginning:
+           #define SERIAL_TX_BUFFER_SIZE 129
+           #define SERIAL_RX_BUFFER_SIZE 150
+      4) open <base Arduino folder>\hardware\arduino\cores\arduino\avr\boards.txt
+         find your board (for example, Arduino UNO) (the section will be started from "uno.name=Arduino Uno")
+         copy the whole section and rename all preffixes to the new one for example, "uno" -> "unohw"
+         change in the new section:
+         1: .name parameter (for example, "uno.name=Arduino Uno" will be "unohw.name=Arduino HW"
+         2: .build.core change to the folder you created before (for example, "uno.build.core=arduino" will be "unohw.build.core=arduinohw")
+5. Now let's make changes in the main file
+   5.1. Set your board in FIRMWARE SETTINGS section in the openHW.ino file. 
+        (for example, if you board is Heltec ESP32 you should delete "//" in the line "//#define board_Heltec")
+        If your board is not listed, you should configure it below in the boards ection or do nothing (screen and buttons will not work in this case)
+   5.2. Make sure that DEBUG option is turned off if you are not a developer.     
+        This is in the second section right after the board selection.
+        if you see the row "#define DEBUG 1" - change it to "//#define DEBUG 1"
+        otherwise it will be possible to see your private keys just using command getConfig()
+   
+6. Connect your board. Select COM port and your board type in Tools menu. If you created a new platfor (recommended) you have to choose it.
+
+7. Press arrow (flash) button to flash the board.
+
+8. Check if firmware works
+
+9. Protect EEPROM memory data from firmware changes (and do other protection thinks)
+ ---For AVR (Arduino UNO, etc):---
+    A: You will need an additional device to make less or more good protection. It costs less than usd$1
+    first, you have to set EESAVE = 1 (off, there 1 means off) to prevent EEP reading using a changed firmware
+    second, it would be a good to change DWEN, SPIEN and RSTDSBL (or only DWEN and RSTDSBL) bits.
+       DWEN = 1(off); SPIEN=1(off);  RSTDSBL = 0 (on). The last two options will make firmware updating impossible
+
+    For most of the available Arduino boards this point can be omitted (the system security will be reduced, be sure to use the Password, 
+    if you lose the key - remove the paring on the host with it), because by default the memory cleaning when flashing is enabled  and debugging is disabled.
+    You can easily check this by flashing the device, setting a private key and flashing it again. 
+    If the private key is disappeared and the key returns to the uninitialized state - that's okay, changing EESAVE bit is not required.
+
+    if you not pass this step you private key can be read from the chip easily
+    BE VERY CAREFUL HERE, YOU CAN BRICK YOUR BOARD
+    universal calculator: http://www.engbedded.com/fusecalc/
+
+    A partial solution may be to buy a board with the EESAVE flag sets to 1 (off). It is a default value for many boards.
+    In this case if intruders wants to read your key he must at least disassembly device and use additional equipment.
+    DWEN is usually turned off (1) by default.
+
+# Usage example protocol
+">" means we send the text to the device (do not type ">" symbol itself
+"<" means the device's answer (do not type "<" symbol itself
+## Initial setup:
+> 
 
 ----------------------------------------------------------------------------
 CREDS
  * https://github.com/kamaljohnson/Arduino-SHA256/
-
-
-----------------------------------------------------------------------------
-DELETE IT
-
-If you want to change the defaults for uECC_CURVE and uECC_ASM, you must change them in your Makefile or similar so that uECC.c is compiled with the desired values (ie, compile uECC.c with -DuECC_CURVE=uECC_secp256r1 or whatever).
-
-* When compiling for an ARM/Thumb-2 platform with `uECC_OPTIMIZATION_LEVEL` >= 3, you must use the `-fomit-frame-pointer` GCC option (this is enabled by default when compiling with `-O1` or higher).
-* When compiling for AVR, you must have optimizations enabled (compile with `-O1` or higher).
-* When building for Windows, you will need to link in the `advapi32.lib` system library.
-
-
-For 8-bits AVR  I also have Arduino UNO. Constantly get same linker errors (try with -O1 or -Os flags). After many attempts to resolve this, I found by chance what change from
-define uECC_SUPPORT_COMPRESSED_POINT 1
-to
-define uECC_SUPPORT_COMPRESSED_POINT 0
-//in uECC.h resolve this issue. Maybe this helps somebody.
-
-//Useful:
-//http://wikihandbk.com/wiki/ESP8266:%D0%9F%D1%80%D0%BE%D1%88%D0%B8%D0%B2%D0%BA%D0%B8/Arduino/PROGMEM
-
-https://russiansemiresearch.com
-
-//stm
-http://tqfp.org/stm32/zashita-ot-schityvaniya-proshivki-stm32.html
-
 */
 //========================================================================================FIRMWARE SETTINGS=====================
 //Board: (if nothing changed then default settings will be applied. You can see details in the boards section)
@@ -52,7 +90,7 @@ http://tqfp.org/stm32/zashita-ot-schityvaniya-proshivki-stm32.html
 //Use SHA256 (needs 450+ bytes RAM)
 #define SHA256_SUPPORTED 1
 //Debug mode:
-#define DEBUG 1
+//#define DEBUG 1
 
 //---------------------------------------defaults ---------------------------
 #define DROP_IF_WRONG_PIN true
@@ -71,7 +109,7 @@ http://tqfp.org/stm32/zashita-ot-schityvaniya-proshivki-stm32.html
 // #pragma message ("DO NOT FORGET TO REVIEW FIRMWARE SETTINGS")
 
 //==============================================================================================================================
-#define VERSION F("0.3")
+#define VERSION F("0.4")
 
 //============================================================== Includes  =====================
 #include <types.h>
@@ -90,6 +128,7 @@ http://tqfp.org/stm32/zashita-ot-schityvaniya-proshivki-stm32.html
 #ifdef board_Heltec_WiFi_Kit_8
   #define OPTION_screen 1
 #endif
+
 //============================================================== helper section  ================
 //unsigned char tBuf[80]; //universal buf. DO NOT use it if you are going to call any functions while using it
 uint32_t crc32b(const unsigned char *message, size_t len) {
@@ -275,6 +314,7 @@ void debugPrint(const __FlashStringHelper * str, bool newline=true, bool printMe
   #define setScreenStatus(x)
   #define screenShow(x)
 #endif
+
 //===================================================================================================================================================
 
 #if defined(__PIC32MX__)
@@ -561,6 +601,7 @@ byte scfHelp() {
   Serial.print(F("  it will erase all privateKeys and set all pins to "".\n"));
   Serial.print(F("getPublicKey : gets current public key\n"));
   Serial.print(F("signMessage(<message>[,bip66padding]) : signs the message. Message in hex. Result in hex\n"));
+  Serial.print(F("ECDH(<pubkey>) : create a shared secret for ECDH. Public Key must be uncompressed\n"));
   //Serial.print(F(" (*) signTX(TXdata>,<nOut>) : signs transaction input nOut. Message in hex. Result in hex\n"));
   //Serial.print(F("signTXDigest(<TXdata>[,bip66padding]) : signs transaction digest. Data in hex. Result in hex\n"));
   Serial.print(F("setPin(<pin>) : sets current pin. Pin is text (don't use \")\" in pin)\n"));
@@ -647,12 +688,16 @@ size_t checkAndDecodePrivateKey(const char *data, size_t len, uint8_t *result) {
     //check crc
     #ifdef SHA256_SUPPORTED
       uint8_t hash[32];
+      #ifdef DEBUG
       Serial.print(F("#Ready to calc SHA256. "));printMemory();
+      #endif
       if (!checkMemory(350)) return -1;
       SHA256(res,34,hash);
       SHA256(hash,32,hash);
+      #ifdef DEBUG
       Serial.print(F("#SHA256 calculated. "));printMemory();
       Serial.print(F("#hash=")); for (int i=0; i<32; i++) {Serial.print(hash[i],HEX); Serial.print(F(" "));};  Serial.println(F(" "));      
+      #endif
       for (int i=0; i<4; i++) if (hash[i]!=res[34+i]) {
         Serial.println(F("ERROR: Private key not assigned: wrong crc"));
         screenShow("ERROR: wrong crc");
@@ -1049,9 +1094,53 @@ byte doSetPin(const char *data, size_t len, byte pinNo){
   writeSettings(&settings);
   onUpdateSettings(&settings);
 
+  Serial.println(F("OK: PIN has been set up"));
   screenShow("The PIN was changed");
   return 0;  
 };
+
+byte doECDH(const char *data, size_t len){
+  debugPrint(F("doECDH called."),1,1);
+  #ifdef DEBUG
+    Serial.print(F("#data="));  for (size_t i=0; i<len; i++) Serial.print((char)data[i]); Serial.print(F(" len= ")); Serial.println(len);
+  #endif
+
+  
+  if (len!=128) {
+    Serial.println(F("ERROR: wrong public key length"));
+    screenShow("ERROR: wrong pubkey");    
+    return 0;  
+  };
+  if (!unlocked()) return 1;
+    
+  uint8_t pub[64];
+  uint8_t privkey[32];
+  uint8_t res[32];
+  
+  bufFromHex(data, len, pub);  
+
+  if (getPrivateKey(privkey)) {
+    //Returns 1 if the shared secret was generated successfully, 0 if an error occurred.
+    if ( 
+         uECC_shared_secret(
+           pub, //const uint8_t *public_key,
+           privkey, //const uint8_t *private_key,
+           res,  //uint8_t *secret,
+           curve //uECC_Curve curve
+         )
+       ){
+          hex8Serial(res,32); Serial.println();
+          screenShow("ECDH secret made");        
+        } else {
+          Serial.println(F("ERROR: ECDH secret creation error"));
+          screenShow("ERROR: ECDH secret error");    
+        };
+  } else {
+    Serial.println(F("ERROR: can't access private key"));
+    screenShow("ERROR: can't access private key");    
+  };  
+  return 0;
+}
 
 byte doSignMessage(const char *data, size_t len){
   debugPrint(F("doSignMessage called."),1,1);
@@ -1148,7 +1237,7 @@ byte doTest(const char *data, size_t len) {
       //SHA256(hash,32,hash);  
     };
     */
-    Serial.print(F("data="));  for (int i=0; i<len; i++) {Serial.print(data[i],HEX); Serial.print(F(" "));};  Serial.println(F(" "));
+    Serial.print(F("#data="));  for (int i=0; i<len; i++) {Serial.print(data[i],HEX); Serial.print(F(" "));};  Serial.println(F(" "));
     for (int v=0; v<100; v++) {
       uint8_t hash[32];
       SHA256((uint8_t*)data,len,hash);
@@ -1191,10 +1280,10 @@ int xmemcmp(const __FlashStringHelper * str, const char *data, size_t len) {
 bool doSerialCommand(const char *data, size_t len, size_t *pinPos) {
 
   if (data[0]==10) debugPrint(F("doSerialCommand called data[0]=\\n."),1,1);
- // #ifdef DEBUG
+  #ifdef DEBUG
  //   //Serial.print(F("#doSerialCommand: len=")); Serial.print(len); Serial.print(F(" data="));  hex8Serial((uint8_t*)data,len);  Serial.println();
- //   Serial.print(F("#doSerialCommand: len=")); Serial.print(len); Serial.print(F(" data="));  for (int i=0; i<len; i++) Serial.print(data[i]);  Serial.println();
- // #endif
+//    Serial.print(F("#*****doSerialCommand: len=")); Serial.print(len); Serial.print(F(" data="));  for (size_t i=0; i<len; i++) Serial.print(data[i]);  debugPrint(F(" "),1,1);// Serial.println();
+  #endif
   
   //we must set pinPos = Len if we need pin
   if (*pinPos>0) {
@@ -1221,41 +1310,52 @@ bool doSerialCommand(const char *data, size_t len, size_t *pinPos) {
   //else if ((sCmd.startsWith("SETPRIVATEKEY("))&&(sCmd.endsWith(")"))) doSetPrivateKey(sCmd.substring(14,sCmd.length()-1));
   //else if ((sCmd.startsWith("TEST("))&&(sCmd.endsWith(")"))) doTest(sCmd.substring(5,sCmd.length()-1));
   size_t res = 0; 
+
+  size_t mlen = len;
+  if (*pinPos>0) mlen = *pinPos;
+  #ifdef DEBUG
+     Serial.print(F("#*****doSerialCommand: mlen=")); Serial.print(mlen); Serial.print(F(" data="));  for (size_t i=0; i<mlen; i++) Serial.print(data[i]);  debugPrint(F(" "),1,1);// Serial.println();
+  #endif      
   
-  if (xmemcmp(F("HELP"),data,len) ==0) res = scfHelp();
+  
+  if (xmemcmp(F("HELP"),data,mlen) ==0) res = scfHelp();
  
-  else if (xmemcmp(F("HELLOHW"),data,len) ==0) {Serial.print(F("HELLO OPENHW v")); Serial.println(VERSION);}
-  else if (xmemcmp(F("STATUS"),data,len) ==0) res = scfStatus();
-  else if (xmemcmp(F("LOCK"),data,len) ==0) res = scfLock();
-  else if (xmemcmp(F("UNLOCK"),data,len) ==0) res = scfUnlock();  
+  else if (xmemcmp(F("HELLOHW"),data,mlen) ==0) {Serial.print(F("HELLO OPENHW v")); Serial.println(VERSION);}
+  else if (xmemcmp(F("STATUS"),data,mlen) ==0) res = scfStatus();
+  else if (xmemcmp(F("LOCK"),data,mlen) ==0) res = scfLock();
+  else if (xmemcmp(F("UNLOCK"),data,mlen) ==0) res = scfUnlock();  
 
   else if (
-     (xmemcmp(F("SETPRIVATEKEY("),data,len) ==0)
-     &&(memcmp(data+len-1,")",1)==0)
-     ) res = doSetPrivateKey(data+14,len-15);
+     (xmemcmp(F("SETPRIVATEKEY("),data,mlen) ==0)
+     &&(memcmp(data+mlen-1,")",1)==0)
+     ) res = doSetPrivateKey(data+14,mlen-15);
   //getPublicKey
-  else if (xmemcmp(F("GETPUBLICKEY"),data,len) ==0) res = doGetPublicKey();
+  else if (xmemcmp(F("GETPUBLICKEY"),data,mlen) ==0) res = doGetPublicKey();
   //getConfig
   else if (
-     (xmemcmp(F("GETCONFIG("),data,len) ==0)
-     &&(memcmp(data+len-1,")",1)==0)
-     ) res = doGetConfig(data+10,len-11);  
+     (xmemcmp(F("GETCONFIG("),data,mlen) ==0)
+     &&(memcmp(data+mlen-1,")",1)==0)
+     ) res = doGetConfig(data+10,mlen-11);  
   else if (
-     (xmemcmp(F("SIGNMESSAGE("),data,len) ==0)
-     &&(memcmp(data+len-1,")",1)==0)
-     ) res = doSignMessage(data+12,len-13);       
+     (xmemcmp(F("SIGNMESSAGE("),data,mlen) ==0)
+     &&(memcmp(data+mlen-1,")",1)==0)
+     ) res = doSignMessage(data+12,mlen-13);       
   else if (
-     (xmemcmp(F("SETPIN("),data,len) ==0)
-     &&(memcmp(data+len-1,")",1)==0)
-     ) res = doSetPin(data+7,len-8,0);     
+     (xmemcmp(F("ECDH("),data,mlen) ==0)
+     &&(memcmp(data+mlen-1,")",1)==0)
+     ) res = doECDH(data+5,mlen-6);            
   else if (
-     (xmemcmp(F("SETPIN2("),data,len) ==0)
-     &&(memcmp(data+len-1,")",1)==0)
-     ) res = doSetPin(data+8,len-9,1);          
+     (xmemcmp(F("SETPIN("),data,mlen) ==0)
+     &&(memcmp(data+mlen-1,")",1)==0)
+     ) res = doSetPin(data+7,mlen-8,0);     
   else if (
-     (xmemcmp(F("TEST("),data,len) ==0)
-     &&(memcmp(data+len-1,")",1)==0)
-     ) res = doTest(data+5,len-6);
+     (xmemcmp(F("SETPIN2("),data,mlen) ==0)
+     &&(memcmp(data+mlen-1,")",1)==0)
+     ) res = doSetPin(data+8,mlen-9,1);          
+  else if (
+     (xmemcmp(F("TEST("),data,mlen) ==0)
+     &&(memcmp(data+mlen-1,")",1)==0)
+     ) res = doTest(data+5,mlen-6);
   else return 0;
 
   if (res==1) {
@@ -1313,7 +1413,7 @@ void loop() {
     //if (sCmd=="") sCmdBFound = 0;
     if (cmdLen==0) {
         sCmdBFound = 0; 
-        //if (pinPos) debugPrint(F("#*******pinPos drop*******")); 
+        //if (pinPos) debugPrint(F("#pinPos drop")); 
         pinPos = 0; 
         //LOCKED or other state must be indicated by the procedure who cleared cmdLen
     }; 
@@ -1326,6 +1426,7 @@ void loop() {
     };
 
     ibuf[cmdLen] = char(Serial.read()); cmdLen++;
+    sCmdLastRead = millis();
     //just ignore \r
     if (ibuf[cmdLen-1]==13) {
       cmdLen--;
@@ -1335,7 +1436,7 @@ void loop() {
     sCmdBFound = sCmdBFound || (ibuf[cmdLen-1]=='(');
     if ((!sCmdBFound) && (ibuf[cmdLen-1]>='a')&&(ibuf[cmdLen-1]<='z') && (pinPos==0)) ibuf[cmdLen-1] = ibuf[cmdLen-1] + 'A' - 'a';
 
-    sCmdLastRead = millis();
+    
 
     //do the command if it is finished
     //sCmd.toUpperCase() don't need 
@@ -1363,7 +1464,7 @@ void loop() {
     //cut \n for end of command or end of PIN - but only if the pin is not empty
     //if ((cmdLen>0) && (ibuf[cmdLen-1]==10) && ((pinPos==0) || ((pinPos+1)!=cmdLen))) 
     if ((cmdLen>0) && (ibuf[cmdLen-1]==10) && (pinPos==0)) 
-    #ifndef DEBUGxxxxxx
+    #ifndef DEBUGxxxx
       cmdLen = 0; //the line was terminated but it was not correct
     #else  
       {
@@ -1373,6 +1474,7 @@ void loop() {
     #endif
     if (cmdLen==0) debugPrint(F("main loop cmdLen==0."),1,1);
   };
+  
 /*  
   const struct uECC_Curve_t * curve = uECC_secp160r1();
   uint8_t private1[21];
@@ -1417,5 +1519,37 @@ void loop() {
   } else {
     Serial.print("Shared secrets are identical\n");
   }
+
+
+
+----------------------------------------------------------------------------
+DELETE IT
+
+If you want to change the defaults for uECC_CURVE and uECC_ASM, you must change them in your Makefile or similar so that uECC.c is compiled with the desired values (ie, compile uECC.c with -DuECC_CURVE=uECC_secp256r1 or whatever).
+
+* When compiling for an ARM/Thumb-2 platform with `uECC_OPTIMIZATION_LEVEL` >= 3, you must use the `-fomit-frame-pointer` GCC option (this is enabled by default when compiling with `-O1` or higher).
+* When compiling for AVR, you must have optimizations enabled (compile with `-O1` or higher).
+* When building for Windows, you will need to link in the `advapi32.lib` system library.
+
+
+For 8-bits AVR  I also have Arduino UNO. Constantly get same linker errors (try with -O1 or -Os flags). After many attempts to resolve this, I found by chance what change from
+define uECC_SUPPORT_COMPRESSED_POINT 1
+to
+define uECC_SUPPORT_COMPRESSED_POINT 0
+//in uECC.h resolve this issue. Maybe this helps somebody.
+
+//Useful:
+//http://wikihandbk.com/wiki/ESP8266:%D0%9F%D1%80%D0%BE%D1%88%D0%B8%D0%B2%D0%BA%D0%B8/Arduino/PROGMEM
+
+https://russiansemiresearch.com
+
+//stm
+http://tqfp.org/stm32/zashita-ot-schityvaniya-proshivki-stm32.html
+
+//arm
+http://www.hobbytronics.co.uk/arduino-serial-buffer-size
+http://www.engbedded.com/fusecalc/
+
+http://www.getchip.net/posts/068-kak-pravilno-proshit-avr-fyuzy-fuse-bit/comment-page-3/
 */
 }
