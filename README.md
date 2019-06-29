@@ -180,10 +180,13 @@ this test is also repeated in openHW.ino file
     In this case if intruders wants to read your key he must at least disassembly device and use additional equipment.
     DWEN is usually turned off (1) by default.
 	
-#Protocol usage example 
+# Protocol usage example 
   *this test is also repeated in openHW.ino file*
+  
   ">>" means we send the text to the device (do not type ">" symbol itself
+  
   "<<" means the device's answer (do not type "<" symbol itself
+  
   You can communication with the device using text commands, which can be ended by a line feed character or be sent by a solid stream.
   the device's answers will be ended with \n char
   
@@ -194,87 +197,91 @@ this test is also repeated in openHW.ino file
   
 ## Checking connection
 *use it for check if you are connected to the device*
-
-> >>helloHW
+```
+ >>helloHW
  <<HELLO OPENHW v0.4
-
+```
 *The result must be started from "HELLO OPENHW" string*
   
 ## Initial setup:
-*first, we have to set up private key(s). In this example we will set the both main and PD private keys.*
-*You can perform this procedure on a device that has just been programmed or on a device that is already set up (it will be reset)*
-
+first, we have to set up private key(s). In this example we will set the both main and PD private keys.
+You can perform this procedure on a device that has just been programmed or on a device that is already set up (it will be reset)
+```
 >>setPrivateKey(KxTjwqzzZjYfXEY1JsaywDXYkWPjTQc9MynkAdJbj78Aki4b9wEg,L3VdUrEEAeKwvyxZ81XkVxBGwiM5QxTXuUrrMJcr4pN6u8hV37om)
 <<OK: Both keys were assigned
+```
+This command sets the main Private Key of the KxTjwqzzZjYfXEY1JsaywDXYkWPjTQc9MynkAdJbj78Aki4b9wEg 
+  (this key corresponds to the master password of the KeyKeeper program "1" s/0/0 HD and to the address EMYEfuf21PyEt4GfBpoZkEWhaQNAW6GXQR)
+  and PD Private Key L3VdUrEEAeKwvyxZ81XkVxBGwiM5QxTXuUrrMJcr4pN6u8hV37om (Master Password "2", EYjzaPvKAxCfVvztLFv2s4qqYhyf1F9NVB)
+for bitcoin and default electrum BIP39 salt ("mnemonic") it will be the same:
+setPrivateKey(KzXvca32X4NaxNcKYAQ6iduf3PRZsAezLczPLvfHu96jw7jjTB5D,KxwtfCyJJfFkZSSjSP67F8ejRZQYZExRAZmznbKxC9z9MNsAhVMh)
+for addresses 1Fdy5g8mG1sGmQb39HhAYSTjYpfHztouFh and 13W9cELWjSd6bHstr4hkmyhGZ26r46rKKy
 
-*This command sets the main Private Key of the KxTjwqzzZjYfXEY1JsaywDXYkWPjTQc9MynkAdJbj78Aki4b9wEg 
-  *(this key corresponds to the master password of the KeyKeeper program "1" s/0/0 HD and to the address EMYEfuf21PyEt4GfBpoZkEWhaQNAW6GXQR)* 
-  *and PD Private Key L3VdUrEEAeKwvyxZ81XkVxBGwiM5QxTXuUrrMJcr4pN6u8hV37om (Master Password "2", EYjzaPvKAxCfVvztLFv2s4qqYhyf1F9NVB)*
-*for bitcoin and default electrum BIP39 salt ("mnemonic") it will be the same:*
-*setPrivateKey(KzXvca32X4NaxNcKYAQ6iduf3PRZsAezLczPLvfHu96jw7jjTB5D,KxwtfCyJJfFkZSSjSP67F8ejRZQYZExRAZmznbKxC9z9MNsAhVMh)*
-*for addresses 1Fdy5g8mG1sGmQb39HhAYSTjYpfHztouFh and 13W9cELWjSd6bHstr4hkmyhGZ26r46rKKy*
-
-*So, the two private keys - the main one and the one to be provided under the forcible demand - are set. Now you need to set the PIN codes:*
-*set main pin: 9876*
-
+So, the two private keys - the main one and the one to be provided under the forcible demand - are set. Now you need to set the PIN codes:
+set main pin: 9876
+```
 >>setPin(9876)
 <<OK: PIN has been set up
-
-*ok. now let set PD pin: 123*
+```
+ok. now let set PD pin: 123
+```
 >>setPin2(123)
 <<OK: PIN has been set up
-
-*ok, the initialization has been done. Was it difficult?*
+```
+ok, the initialization has been done. Was it difficult?
 **WARNING: DO NOT USE KEYWALK PINS LIKE 1234, 7654 or your DOB**
 
 ## Retrieving the Public Key and determining address:
-*Getting the current address is easy, just run the getPublicAddress command *
-*If the device has been locked, you will need to enter the PIN.*
-
+Getting the current address is easy, just run the getPublicAddress command 
+If the device has been locked, you will need to enter the PIN.
+```
 >>getPublicKey
 <<BAB1473EED46A7266430CFA69F48184481B0D3B30DF9964CF9E3055D230B9D5B6817D514B7ED40F0DB48A721AE2C5DF301EE8066263237B42F506932958A4CB0
-
-*the key is uncompressed. For determine the address, we must comress it first:*
-*the compressed will be 02BAB1473EED46A7266430CFA69F48184481B0D3B30DF9964CF9E3055D230B9D5B . We just drop second part (Y coord) of the key and add 02 because Y is odd*
-* now calculate RipeMD160(sha256(02BAB1473EED46A7266430CFA69F48184481B0D3B30DF9964CF9E3055D230B9D5B)) = 3019A9CD558E4F9A3E197A1D7DF5BEF71522BBA2 *
-* add network signature (0x21 for Emercoin): we get 213019A9CD558E4F9A3E197A1D7DF5BEF71522BBA2 *
-* convert it to the code58check encoding: we get EMYEfuf21PyEt4GfBpoZkEWhaQNAW6GXQR*
+```
+the key is uncompressed. For determine the address, we must comress it first:
+the compressed will be 02BAB1473EED46A7266430CFA69F48184481B0D3B30DF9964CF9E3055D230B9D5B . We just drop second part (Y coord) of the key and add 02 because Y is odd
+ now calculate RipeMD160(sha256(02BAB1473EED46A7266430CFA69F48184481B0D3B30DF9964CF9E3055D230B9D5B)) = 3019A9CD558E4F9A3E197A1D7DF5BEF71522BBA2
+ add network signature (0x21 for Emercoin): we get 213019A9CD558E4F9A3E197A1D7DF5BEF71522BBA2
+ convert it to the code58check encoding: we get EMYEfuf21PyEt4GfBpoZkEWhaQNAW6GXQR
 
 ## Signing transactions
-*First of all, the application on the host must calculate hash to sign.*
-*This must be done one by one for each TX input that requires a signature.*
-*Next, the resulting hash is passed to the device using the signMessage(<hashtosign>[,<signtx>]) command.*
-
+First of all, the application on the host must calculate hash to sign.
+This must be done one by one for each TX input that requires a signature.
+Next, the resulting hash is passed to the device using the signMessage(<hashtosign>[,<signtx>]) command.
+```
 >>signMessage(E3FFCC983D047EAB781C31AFA21B71AD15393C3B3EBD9944F278652F85E18266,1)
 <<0589B5F4E91C0E2B9C0767BF9ECAA7E9993C8663823029DF6C4D345EEBF8B175169C75B1BCED40C11B187B6B751062A15065DEA1EFD26FF8421B5335D9E9ABA9
-
-*The result is the Input signature (R and S). You can conver it into DER format yourself.*
+```
+The result is the Input signature (R and S). You can conver it into DER format yourself.
 
 ## Other operations
-*-------changing PD PIN-------*
-*now let set PD pin: 123. Setting the PIN2 requires the main PIN to be entered, which will be requested*
+-------changing PD PIN-------
+now let set PD pin: 123. Setting the PIN2 requires the main PIN to be entered, which will be requested
+```
 >>setPin2(123)
 <<PIN: please provide your pin
-
-*An important remark. We could have avoided the second iteration of the PIN entering by introducing the PIN right after the command. Then we would have to enter just "setPin2(123)9876".*
-*If the device had been unlocked, no PIN entry would have been required.*
-*ok. enter the pin:*
-
+```
+An important remark. We could have avoided the second iteration of the PIN entering by introducing the PIN right after the command. Then we would have to enter just "setPin2(123)9876".
+If the device had been unlocked, no PIN entry would have been required.
+ok. enter the pin:
+```
 >>9876
 <<OK: PIN has been set up
-
+```
 *ok, done*
 
-*-------just unlock the device with pin 9876-------*
+-------just unlock the device with pin 9876-------
+```
 >>unlock9876
 <<OK: locked
-
-*-------unlock the locked device in the dialog-------*
-> >unlock
-  <PIN: please provide your pin
+```
+-------unlock the locked device in the dialog-------
+```
+>>unlock
+<<PIN: please provide your pin
 >>9876
 <<OK: unlocked
-
+```
 *-------lock it-------*
 >>lock
 <<OK: locked
