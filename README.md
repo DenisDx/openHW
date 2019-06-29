@@ -240,12 +240,12 @@ If the device has been locked, you will need to enter the PIN.
 >> getPublicKey
 << BAB1473EED46A7266430CFA69F48184481B0D3B30DF9964CF9E3055D230B9D5B6817D514B7ED40F0DB48A721AE2C5DF301EE8066263237B42F506932958A4CB0
 ```
-The key is uncompressed. For determine the address, we must comress it first:
 
-* The compressed will be 02BAB1473EED46A7266430CFA69F48184481B0D3B30DF9964CF9E3055D230B9D5B . We just drop second part (Y coord) of the key and add 02 because Y is odd
-* now calculate RipeMD160(sha256(02BAB1473EED46A7266430CFA69F48184481B0D3B30DF9964CF9E3055D230B9D5B)) = 3019A9CD558E4F9A3E197A1D7DF5BEF71522BBA2
-* add network signature (0x21 for Emercoin): we get 213019A9CD558E4F9A3E197A1D7DF5BEF71522BBA2
-* convert it to the code58check encoding: we get EMYEfuf21PyEt4GfBpoZkEWhaQNAW6GXQR
+* The key is uncompressed. For determine the address, we must compress it first: just drop second part (Y coord) of the key and add 02 because Y is odd. 
+The compressed will be 02BAB1473EED46A7266430CFA69F48184481B0D3B30DF9964CF9E3055D230B9D5B . 
+* Calculate RipeMD160(sha256(02BAB1473EED46A7266430CFA69F48184481B0D3B30DF9964CF9E3055D230B9D5B)) = 3019A9CD558E4F9A3E197A1D7DF5BEF71522BBA2
+* Add network signature (0x21 for Emercoin): we get 213019A9CD558E4F9A3E197A1D7DF5BEF71522BBA2
+* Convert it to the code58check encoding: we get EMYEfuf21PyEt4GfBpoZkEWhaQNAW6GXQR
 
 ## Signing transactions
 First of all, the application on the host must calculate hash to sign.
@@ -261,6 +261,7 @@ The result is the Input signature (R and S). You can conver it into DER format y
 
 ## Other operations
 -------changing PD PIN-------
+
 now let set PD pin: 123. Setting the PIN2 requires the main PIN to be entered, which will be requested
 ```
 >> setPin2(123)
@@ -275,7 +276,7 @@ ok. enter the pin:
 >> 9876
 << OK: PIN has been set up
 ```
-*ok, done*
+ok, done
 
 -------just unlock the device with pin 9876-------
 ```
@@ -297,13 +298,13 @@ ok. enter the pin:
 -------get settings-------
 ```
 >> getConfig()
->> OK: openHW configuration:
->> Name:
->> Ask pin every time:0
->> Lock pin after (ms):0
->> Button mode: use only for unlock pin
->> WIF:EF
->> Sig:21
+<< OK: openHW configuration:
+<< Name:
+<< Ask pin every time:0
+<< Lock pin after (ms):0
+<< Button mode: use only for unlock pin
+<< WIF:EF
+<< Sig:21
 ```
 -------get current device state-------
 ```
