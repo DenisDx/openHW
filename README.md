@@ -195,8 +195,8 @@ this test is also repeated in openHW.ino file
 ## Checking connection
 *use it for check if you are connected to the device*
 
->>helloHW
-<<HELLO OPENHW v0.4
+> >>helloHW
+ <<HELLO OPENHW v0.4
 
 *The result must be started from "HELLO OPENHW" string*
   
@@ -270,8 +270,8 @@ this test is also repeated in openHW.ino file
 <<OK: locked
 
 *-------unlock the locked device in the dialog-------*
->>unlock
-<<PIN: please provide your pin
+> >unlock
+  <PIN: please provide your pin
 >>9876
 <<OK: unlocked
 
