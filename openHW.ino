@@ -83,8 +83,14 @@ CREDS
         //use WiFi_Kit_32 board for https://dl.espressif.com/dl/package_esp32_index.json  library
 
 //#define board_Heltec_WiFi_Kit_8  
-         //= HTIT-W8266 //https://heltec.org/project/wifi-kit-8/  //library: In the Arduino IDE, in the Tools > Board menu choose  //choose board: NodeMCU 1.0 (ESP-12E Module)
+         //= HTIT-W8266 //https://heltec.org/project/wifi-kit-8/  //library: In the Arduino IDE, in the Tools > Board menu choose  choose board: NodeMCU 1.0 (ESP-12E Module)
          //alternative from Heltec:   https://github.com/Heltec-Aaron-Lee/WiFi_Kit_series/releases/download/0.0.1/package_heltec_esp8266_index.json  ; board name Wifi_Kit_8
+
+//#define board_WEMOS_LoLin32_Oled //use WEMOS_LoLin32 board. screen connected 
+   //= HW-630
+   //? = Wemos® Nodemcu Wifi
+   //? = wemos D-duino
+
 
 //---------------------------------------linkage settings--------------------
 //Use SHA256 (needs 450+ bytes RAM)
@@ -96,8 +102,10 @@ CREDS
 #define DROP_IF_WRONG_PIN true
 #define SERIAL_TIMEOUT 500 //milliseconds
 #define PIN_TIMEOUT 100000 //100 sec
+#define BUTTON_TIMEOUT_MS 10000 //10 sec
 //Maximum PIN length
 #define PIN_MAX_SIZE 8
+#define PASSWORD_LEN 16
 
 //THIS IS THE END OF THE SETTINGS.
 #define uECC_OPTIMIZATION_LEVEL 3
@@ -109,7 +117,7 @@ CREDS
 // #pragma message ("DO NOT FORGET TO REVIEW FIRMWARE SETTINGS")
 
 //==============================================================================================================================
-#define VERSION F("0.4")
+#define VERSION F("0.5")
 
 //============================================================== Includes  =====================
 #include <types.h>
@@ -122,12 +130,37 @@ CREDS
 //U8g2 for screeen
 //Esp32 for the board
 //pro_micro / uno ... define nothing
+
+
+
+
+//U8X8_SSD1306_128X64_NONAME_SW_I2C u8x8(/* clock=*/ 15, /* data=*/ 4, /* reset=*/ 16);
+// U8G2_SSD1306_128X64_NONAME_F_SW_I2C u8g2(U8G2_R0, /* clock=*/ 15, /* data=*/ 4, /* reset=*/ 16);
+//#ifdef board_Heltec_WiFi_Kit_32
+//#define OPTION_screen_OLED U8G2_SSD1306_128X64_NONAME_F_SW_I2C u8g2(U8G2_R0, /* clock=*/ 15, /* data=*/ 4, /* reset=*/ 16);
+//#elif defined(board_Heltec_WiFi_Kit_8)
+//U8G2_SSD1306_128X32_UNIVISION_F_HW_I2C u8g2(U8G2_R0, /* clock=*/ 16, /* data=*/ 5, /* reset=*/ 4); 
+//#elif defined(board_WEMOS_LoLin32_Oled)
+//U8G2_SSD1306_128X64_NONAME_F_SW_I2C u8g2(U8G2_R0, /* clock=*/ 15, /* data=*/ 4, /* reset=*/ 16);
+//#endif
+
+
+
 #ifdef board_Heltec_WiFi_Kit_32
-  #define OPTION_screen 1
+  #define OPTION_screen_OLED U8G2_SSD1306_128X64_NONAME_F_SW_I2C u8g2(U8G2_R0, /* clock=*/ 15, /* data=*/ 4, /* reset=*/ 16);
+  #define OPTION_screen_placement 1 //128X64 default
+  #define OPTION_button 0 //pinMode(OPTION_button,INPUT_PULLUP);
 #endif
 #ifdef board_Heltec_WiFi_Kit_8
-  #define OPTION_screen 1
+  #define OPTION_screen_OLED U8G2_SSD1306_128X32_UNIVISION_F_HW_I2C u8g2(U8G2_R0, /* clock=*/ 16, /* data=*/ 5, /* reset=*/ 4);
+  #define OPTION_screen_placement 2 //128X32 default
 #endif
+#ifdef board_WEMOS_LoLin32_Oled
+  #define OPTION_screen_OLED U8G2_SSD1306_128X64_NONAME_F_SW_I2C u8g2(U8G2_R0, /* clock=*/ 4, /* data=*/ 5, /* reset=*/ 15);
+  #define OPTION_screen_placement 1 //128X64 default
+  #define OPTION_button 0 //pinMode(OPTION_button,INPUT_PULLUP);
+#endif  
+
 
 //============================================================== helper section  ================
 //unsigned char tBuf[80]; //universal buf. DO NOT use it if you are going to call any functions while using it
@@ -177,7 +210,7 @@ struct Settings
   char pin1[9]; //pin for plausible denial
 
   byte attCounter = 0; //attempt counter. Zero it if known pin
-  bool mode1 = 0; //if true, we have entered correct PIN1. So, we are working with privkey1 until the pin0 will be entered. it is possible only if no pins entered for one week
+  byte mode1 = 0; //if true, we have entered correct PIN1. So, we are working with privkey1 until the pin0 will be entered. it is possible only if no pins entered for one week
   bool passwordProtected = 0; //if the key is encrypted by password. If state.password not entered then show error in case the privkey queried
 
   //user settings
@@ -185,7 +218,7 @@ struct Settings
   bool askPinEveryTime = false; //if we need ask pin for every privKey0 access
   bool lockPinAfterMs = 0; //if we need to forget pin 
  
-  byte buttonMode = 1; //0: don't use button 1: only for pin unlock 2: for each private key access
+  byte buttonMode = 1; //0: don't use button (only for setPrivateKey) 1: only for pin unlock 2: for each private key access
 
   //misc
   byte WIF = 0xEF;
@@ -201,9 +234,11 @@ struct State
   unsigned long lastPinEnter = 0; //millis of the last pin enter (no matter if it was correct or not
   char pin[PIN_MAX_SIZE+1]; //pin entered
   unsigned long lastMode1Millis = 0; //last millis attempt for mode 1  
-  byte password[16]; //password for keys protection. 16 bytes
+  byte password[PASSWORD_LEN]; //password for keys protection. 16 bytes
   byte passwordLen = 0; //password for keys protection. 16 bytes
   //String commandWaiting; //the command waiting now. "" if there is no command. Will be executed after any event like pin enter or button pressed
+  byte buttonMode = 0; //will be loaded from settings
+  byte passwordProtected = 0;
 };
 
 
@@ -304,6 +339,17 @@ void debugPrint(const __FlashStringHelper * str, bool newline=true, bool printMe
 #endif
 //===================================================================================================================================================
 //---------------------------decode options-----------------------------------------------------
+
+#ifndef OPTION_button //pinMode(OPTION_button,INPUT_PULLUP);
+  #define askForButton(x) 1
+#else
+  byte askForButton(const bool showHelp = true);
+#endif  
+
+#ifdef OPTION_screen_OLED
+  #define OPTION_screen 1
+#endif  
+
 #ifndef OPTION_screen 
   //empty functions
   void screenInit() {};
@@ -426,6 +472,8 @@ void readSettings(Settings *settings)
   } else debugPrint(F("Settings read."),1,1);
 
   //apply current settings:
+  state.buttonMode = settings->buttonMode;
+  state.passwordProtected = settings->passwordProtected;
   onUpdateSettings(settings);
 };
 
@@ -510,6 +558,10 @@ void initialSettingsLoading(void) {
 };
 
 void setup() {
+  #ifdef OPTION_button 
+    pinMode(OPTION_button,INPUT_PULLUP);
+  #endif   
+  
   Serial.begin(115200);
   while (!Serial);
 
@@ -533,6 +585,8 @@ void setup() {
   #endif  
 }
 
+//CDC void codeDecodePrivateKey(uint8_t * privkey, uint8_t salt);
+void codeDecodePrivateKey(uint8_t * privkey);
 
 //byte __attribute__ ((noinline))  scfStatus() {
 byte scfStatus() {
@@ -549,6 +603,10 @@ byte scfStatus() {
     Serial.print(F("#lastMode1Millis= ")); Serial.println(state.lastMode1Millis);    
     Serial.print(F("#password= ")); hex8Serial(state.password,state.passwordLen); Serial.println();    
     Serial.print(F("#passwordLen= ")); Serial.println(state.passwordLen);        
+    Serial.print(F("#buttonMode= ")); Serial.println(state.buttonMode);        
+    Serial.print(F("#passwordProtected= ")); Serial.println(state.passwordProtected);        
+    
+    
     Serial.println(F("#-----------")); 
     //ibuf,cmdLen-1,&pinPos
     Serial.print(F("#ibuf= ")); hex8Serial((unsigned char*)(ibuf),cmdLen); Serial.println();
@@ -599,6 +657,7 @@ byte scfHelp() {
   Serial.print(F("help : show this text\n"));
   Serial.print(F("setPrivateKey(<private1>[,<private2>]) : sets private key(s). Data in code58check form.\n"));
   Serial.print(F("  it will erase all privateKeys and set all pins to "".\n"));
+  Serial.print(F("  it also drops all passwords. You must set it again (assuming that the old one is empty) .\n"));
   Serial.print(F("getPublicKey : gets current public key\n"));
   Serial.print(F("signMessage(<message>[,bip66padding]) : signs the message. Message in hex. Result in hex\n"));
   Serial.print(F("ECDH(<pubkey>) : create a shared secret for ECDH. Public Key must be uncompressed\n"));
@@ -637,7 +696,8 @@ byte scfHelp() {
   Serial.print(F("2. \"ERROR: comment.\" Operation is not succeseful\n"));  
   Serial.print(F("3. \"PIN: comment\" PIN request\n"));    
   Serial.print(F("4. \"PASSWORD: comment\" Password request\n"));      
-  Serial.print(F("5. \"DATA\" Requested data\n"));  
+  Serial.print(F("5. \"BUTTON: comment\" Hardware button pressing request. Don't need any action from the host\n"));  
+  Serial.print(F("6. \"DATA\" Requested data\n"));  
   Serial.print(F("===Examples===\n")); 
   Serial.print(F("Status\n"));
   Serial.print(F("  prints current device state\n"));
@@ -727,6 +787,7 @@ void dropSettings(Settings *settings){
     settings->pin0[0]=0;
     settings->pin1[0]=0;
 
+    state.passwordProtected = false;
     state.lastPinEnter = 0; //millis of the last pin enter (no matter if it was correct or not
     state.pin[0]=0;
     state.lastMode1Millis = 0; //last millis attempt for mode 1  
@@ -738,6 +799,12 @@ void savePrivateKey(const uint8_t *data,byte n){
   //saving key 0 removes key 1
   Settings settings;
   readSettings(&settings);
+
+  //drop password in any case
+  state.passwordProtected = false;
+  settings.passwordProtected = false;
+  state.passwordLen = 0;
+
   if (n==0) {
     dropSettings(&settings);
     if (data==NULL) memset(settings.privKey0,0,sizeof(settings.privKey0));
@@ -755,6 +822,7 @@ void savePrivateKey(const uint8_t *data,byte n){
 //byte __attribute__ ((noinline)) doSetPrivateKey(const char *data, size_t len) {  --> use -Og... this is not working
 byte doSetPrivateKey(const char *data, size_t len) {
   //return 1 for pin request
+  if (!(askForButton())) return 0;
   //if (!unlocked()) return 1;  ->We don't need it to set pins
   //debugPrint(F("doSetPrivateKey called."),1,1);
   #ifdef DEBUG
@@ -855,7 +923,7 @@ void unlockedFailed(Settings *settings){
   screenShow("Wrong PIN");
   //drop all
   state.pin[0] = 0;
-  pinPos=0;
+  //!!pinPos=0;
   if (DROP_IF_WRONG_PIN) cmdLen=0;     
 };
 
@@ -941,6 +1009,9 @@ bool getPrivateKey(uint8_t res[32])
   if (n==0) memcpy(res,settings.privKey0,sizeof(settings.privKey0));
   else      memcpy(res,settings.privKey1,sizeof(settings.privKey1));
 
+  //CDC codeDecodePrivateKey(res,n);
+  codeDecodePrivateKey(res);
+
   debugPrint(F("getPrivateKey success"),1,1);  
   return true;
 };
@@ -954,10 +1025,29 @@ bool getPublicKey(uint8_t pub[64]) {
   else return false;
 };
 
+bool checkPassword() {
+  if ((state.passwordProtected) && (state.passwordLen==0)) {
+    Serial.println(F("ERROR: password not set"));
+    screenShow("ERROR: password not set");    
+    return false;
+  } else return true;
+};
+
 byte doGetPublicKey() {
-  debugPrint(F("getPublicKey called."),1,1);
+  debugPrint(F("doGetPublicKey called."),1,1);
   //return 1 for pin request
-  if (!unlocked()) return 1; 
+  
+  if (!checkPassword()) return 0;
+
+  //if ((state.buttonMode>1)||((state.buttonMode==1)&&(state.pin[0]==0))) if (!(askForButton())) return 0;
+  if (state.buttonMode>1) if (!(askForButton())) return 0;
+  if (!unlocked()) {
+    debugPrint(F("doGetPublicKey :!unlocked"),1,1);
+    if ((state.buttonMode==1)&&(pinPos==0)) if (!(askForButton())) return 0;
+    return 1; 
+  }
+  
+
   uint8_t pub[64];
   if (getPublicKey(pub)) {
     hex8Serial(pub,64); Serial.println();
@@ -971,7 +1061,13 @@ byte doGetPublicKey() {
 
 byte doGetConfig(const char *data, size_t len){
   #ifndef DEBUG
-    if (!unlocked()) return 1; 
+    //if ((state.buttonMode>1)||((state.buttonMode==1)&&(state.pin[0]==0))) if (!(askForButton())) return 0;
+    //if (!unlocked()) return 1; 
+    if (state.buttonMode>1) if (!(askForButton())) return 0;
+    if (!unlocked()) {
+      if ((state.buttonMode==1)&&(pinPos==0)) if (!(askForButton())) return 0;
+      return 1; 
+    }
   #endif
   Settings settings;
   readSettings(&settings);
@@ -1023,7 +1119,17 @@ byte doGetConfig(const char *data, size_t len){
 };
 
 byte scfUnlock(){
-  if (!unlocked()) return 1; 
+  //if (!unlocked()) {
+  //  if ((state.buttonMode>1)||((state.buttonMode==1)&&(state.pin[0]==0))) if (!(askForButton())) return 0;
+  //  return 1;
+  //}
+  if (!unlocked()) {
+    #ifdef DEBUG
+      Serial.print(F("scfUnlock: !unlocked pinpos="));Serial.println(pinPos);
+    #endif  
+    if ((state.buttonMode>0)&&(pinPos==0)) if (!(askForButton())) return 0;
+    return 1; 
+  }
 
   Settings settings;
   readSettings(&settings); 
@@ -1038,6 +1144,12 @@ byte scfUnlock(){
 
   return 0; 
 }; 
+
+void updateSettings(){
+  Settings settings;
+  readSettings(&settings); 
+  onUpdateSettings(&settings);
+};
 
 byte scfLock(){
   
@@ -1058,7 +1170,9 @@ byte scfLock(){
 
 byte doSetPin(const char *data, size_t len, byte pinNo){
   debugPrint(F("doSetPin called."),1,1);
-  if (!unlocked()) return 1; 
+  if (!unlocked()) return 1;
+  //if (state.buttonMode>0) 
+  if (!(askForButton())) return 0; 
 
   //if we in mode 1 (pin = pin1): move priv1 to priv0 and set pin0; erase pin1 and priv1
   //otherwise just set pin0 or pin1
@@ -1067,6 +1181,7 @@ byte doSetPin(const char *data, size_t len, byte pinNo){
 
   if (settings.mode1) {
     memcpy(settings.privKey0,settings.privKey1,sizeof(settings.privKey0));
+    //CDC codeDecodePrivateKey(settings.privKey0,1);codeDecodePrivateKey(settings.privKey0,0);
     memcpy(settings.pin0,settings.pin1,sizeof(settings.pin0));
     memset(settings.privKey1,0,sizeof(settings.privKey1));
     memset(settings.pin1,0,sizeof(settings.pin1));
@@ -1111,8 +1226,17 @@ byte doECDH(const char *data, size_t len){
     screenShow("ERROR: wrong pubkey");    
     return 0;  
   };
-  if (!unlocked()) return 1;
-    
+
+  if (!checkPassword()) return 0;
+  //if ((state.buttonMode>1)||((state.buttonMode==1)&&(state.pin[0]==0))) if (!(askForButton())) return 0;
+  //if (!unlocked()) return 1;
+  if (state.buttonMode>1) if (!(askForButton())) return 0;
+  if (!unlocked()) {
+    if ((state.buttonMode==1)&&(pinPos==0)) if (!(askForButton())) return 0;
+    return 1; 
+  }
+  
+      
   uint8_t pub[64];
   uint8_t privkey[32];
   uint8_t res[32];
@@ -1142,11 +1266,227 @@ byte doECDH(const char *data, size_t len){
   return 0;
 }
 
+#ifdef OPTION_button
+byte askForButton(const bool showHelp) {
+  //wait for the button pressed. returns 1 if pressed 
+  //1. show messages
+  //2. wait until pressed or timeout
+  // returns if pressed
+  if (showHelp) {
+     setScreenStatus("PRESS BUTTON");
+     Serial.println(F("BUTTON: press hardware button"));
+     screenShow("Press Hardware Button");    
+  };
+
+ byte res=0;
+ unsigned long stAt = millis();
+ while (((res=digitalRead(OPTION_button))) && ((millis()-stAt)<BUTTON_TIMEOUT_MS )) {
+  delay(1);
+  #ifdef ESP8266
+    wdt_reset();
+  #endif  
+ };
+ 
+  
+ if (showHelp) {
+   updateSettings(); //set normal state
+   if (!res) {
+     screenShow("Button pressed");
+   } else {
+     Serial.println(F("ERROR: button not pressed"));
+     screenShow("ERROR: button timeout");        
+   }  
+ };
+ return 1 - res;  
+}
+#endif
+
+
+
+//CDC void codeDecodePrivateKey(uint8_t * privkey, uint8_t salt){
+void codeDecodePrivateKey(uint8_t * privkey){
+  //just xor for now. it is safe IF we use the password ONLY with THIS device and THIS key
+  if (!(state.passwordProtected)) return;
+  
+  if (!memnchr(privkey,0,32)) return; //not set
+
+  uint8_t hash[32];
+
+ /* //CDC 
+  hash[0] = salt;
+  for (int i=0; i<31; i++) hash[i+1] = state.password[i % state.passwordLen];
+  
+  #ifdef SHA256_SUPPORTED
+    if (!checkMemory(350)) return;
+    //SHA256(state.password,state.passwordLen,hash);
+    SHA256(hash,32,hash);
+  // # else
+  // for (int i=0; i<32; i++) hash[i] = state.password[i % state.passwordLen];
+  #endif
+ */ 
+  #ifdef SHA256_SUPPORTED
+    if (!checkMemory(350)) return;
+    SHA256(state.password,state.passwordLen,hash);
+  #else
+    for (int i=0; i<32; i++) hash[i] = state.password[i % state.passwordLen];
+  #endif
+  
+  #ifdef DEBUG
+    Serial.print(F("#codeDecodePrivateKey :")); hex8Serial(state.password,state.passwordLen); Serial.print(F(" ; state.passwordLen=")); Serial.println(state.passwordLen);
+    Serial.print(F("#hash="));  hex8Serial(hash,32); Serial.println();
+  #endif
+
+    
+  for (int i=0; i<32; i++) privkey[i] = privkey[i] ^ hash[i];
+};
+
+byte doSetPassword(const char *data, size_t len){
+  if (!unlocked()) return 1; 
+  // old[,new]
+
+  //if (!askForButton()) {
+  //    Serial.println(F("ERROR: button not pressed"));
+  //    screenShow("ERROR: button not pressed");
+  //    return 0; 
+  //}
+  
+  //<data>[,<data2>]
+  char *cpa = (char*)memchr(data,',',len);
+
+  int dataLen = len;
+  if (cpa!=NULL) dataLen=(cpa-data);
+  if (dataLen>0) {
+    if (!(state.passwordProtected)) {
+      Serial.println(F("ERROR: not password protected"));
+      screenShow("ERROR: not password protected");      
+      return 0;
+    };    
+    if ((dataLen/2)>PASSWORD_LEN) {
+      Serial.println(F("ERROR: password too long"));
+      screenShow("ERROR: password too long");          
+      return 0;
+    };
+    bufFromHex(data, dataLen, state.password);
+    state.passwordLen = (dataLen/2);
+  } else {
+    state.passwordLen = 0;
+  };
+
+  #ifdef DEBUG
+    Serial.print(F("#doSetPassword : state.password= ")); hex8Serial(state.password,state.passwordLen); Serial.println();
+    Serial.print(F("#state.passwordLen=")); Serial.println(state.passwordLen);
+  #endif
+
+  if (cpa) {
+    //change password mode 
+    if ((!(state.passwordProtected)) && ((data - cpa)!=0)) {
+      Serial.println(F("ERROR: password was not protected"));
+      screenShow("ERROR: password was not protected");      
+      return 0;
+    };
+
+    //recrypt passwords.
+    //if we are in CP mode: reencrypt only CP private key. Otherwise both.
+    //decrypt them first
+    Settings settings;
+    readSettings(&settings);
+
+    if (!memnchr(settings.privKey0,0,sizeof(settings.privKey0))) {
+      Serial.println(F("ERROR: private kay not set"));
+      screenShow("ERROR: private kay not set");      
+      return 0;    
+    };
+
+    debugPrint(F("doSetPassword codeDecodePrivateKey... "),1,1);
+    //CDC codeDecodePrivateKey(settings.privKey1,1);
+    codeDecodePrivateKey(settings.privKey1);
+    //CDC if (! settings.mode1) codeDecodePrivateKey(settings.privKey0,0);    //decrypt settings.privKey0
+    if (! settings.mode1) codeDecodePrivateKey(settings.privKey0);    //decrypt settings.privKey0
+
+    debugPrint(F("doSetPassword setting new private keys... "),1,1);
+    //the new password started from cpa+1  and the length is len+ (data - cpa) -1
+    //set it
+    if ((len+ (data - cpa) -1)==0) {
+      //no new passwords 
+      state.passwordLen = 0;
+      settings.passwordProtected = false;
+      state.passwordProtected = false;
+    } else {
+
+      #ifdef DEBUG
+        Serial.print(F("#doSetPassword : cpa+1= ")); hex8Serial((uint8_t *)(cpa+1),len+ (data - cpa) -1); Serial.println();
+        Serial.print(F("#len= ")); Serial.print(len);Serial.print(F("; len+ (data - cpa) -1 = ")); Serial.println(len+ (data - cpa) -1);
+      #endif      
+      
+      if (((len+ (data - cpa) -1) / 2)>PASSWORD_LEN) {
+        Serial.println(F("ERROR: new password too long"));
+        screenShow("ERROR: new password too long");          
+        return 0;
+      };
+      
+      bufFromHex(cpa+1, len+ (data - cpa) -1, state.password);
+      state.passwordLen = (len+ (data - cpa) -1) / 2;      
+
+      settings.passwordProtected = true;
+      state.passwordProtected = true;      
+    };
+
+    debugPrint(F("doSetPassword encrypt the keys again... "),1,1);
+    //encrypt the keys again
+    //CDC codeDecodePrivateKey(settings.privKey1,1);
+    codeDecodePrivateKey(settings.privKey1);
+    //CDC if (! settings.mode1) codeDecodePrivateKey(settings.privKey0,0);    //decrypt settings.privKey0
+    if (! settings.mode1) codeDecodePrivateKey(settings.privKey0);    //decrypt settings.privKey0
+
+    //and save them
+    writeSettings(&settings);
+    onUpdateSettings(&settings);
+
+    Serial.println(F("OK: password has been changed"));
+    screenShow("The password was changed");    
+  } else {
+    Serial.println(F("OK: Password set up")); 
+  };
+  return 0;
+}
+
+byte doSetButtonMode(const char *data, size_t len){
+  debugPrint(F("doSetButtonMode called."),1,1);
+  if (len!=1) {
+    Serial.println(F("ERROR: ButtonMode 0,1,2 are allowed"));
+    screenShow("ERROR set ButtonMode");      
+    return 0;
+  };
+  if (!(askForButton())) return 0;
+
+  Settings settings;
+  readSettings(&settings); 
+
+  //0..9
+  settings.buttonMode = data[0] - '0';
+  
+  writeSettings(&settings);
+  onUpdateSettings(&settings);
+
+  Serial.println(F("OK: ButtonMode set"));
+  screenShow("ButtonMode set");    
+
+  return 0;
+}
+
 byte doSignMessage(const char *data, size_t len){
   debugPrint(F("doSignMessage called."),1,1);
   //return 1 for pin request
-  if (!unlocked()) return 1; 
-
+  if (!checkPassword()) return 0;  
+  //if ((state.buttonMode>1)||((state.buttonMode==1)&&(state.pin[0]==0))) if (!(askForButton())) return 0;
+  //if (!unlocked()) return 1; 
+  if (state.buttonMode>1) if (!(askForButton())) return 0;
+  if (!unlocked()) {
+    if ((state.buttonMode==1)&&(pinPos==0)) if (!(askForButton())) return 0;
+    return 1; 
+  }
+  
+  
   //<hexdata>[,<bip66padding>]
   char *cpa = (char*)memchr(data,',',len);
 
@@ -1313,7 +1653,7 @@ bool doSerialCommand(const char *data, size_t len, size_t *pinPos) {
 
   size_t mlen = len;
   if (*pinPos>0) mlen = *pinPos;
-  #ifdef DEBUG
+  #ifdef DEBUGxxx
      Serial.print(F("#*****doSerialCommand: mlen=")); Serial.print(mlen); Serial.print(F(" data="));  for (size_t i=0; i<mlen; i++) Serial.print(data[i]);  debugPrint(F(" "),1,1);// Serial.println();
   #endif      
   
@@ -1336,10 +1676,19 @@ bool doSerialCommand(const char *data, size_t len, size_t *pinPos) {
      (xmemcmp(F("GETCONFIG("),data,mlen) ==0)
      &&(memcmp(data+mlen-1,")",1)==0)
      ) res = doGetConfig(data+10,mlen-11);  
+  //setButtonMode   
+  else if (
+     (xmemcmp(F("SETBUTTONMODE("),data,mlen) ==0)
+     &&(memcmp(data+mlen-1,")",1)==0)
+     ) res = doSetButtonMode(data+14,mlen-15);    
   else if (
      (xmemcmp(F("SIGNMESSAGE("),data,mlen) ==0)
      &&(memcmp(data+mlen-1,")",1)==0)
-     ) res = doSignMessage(data+12,mlen-13);       
+     ) res = doSignMessage(data+12,mlen-13);
+  else if (
+     (xmemcmp(F("SETPASSWORD("),data,mlen) ==0)
+     &&(memcmp(data+mlen-1,")",1)==0)
+     ) res = doSetPassword(data+12,mlen-13);            
   else if (
      (xmemcmp(F("ECDH("),data,mlen) ==0)
      &&(memcmp(data+mlen-1,")",1)==0)

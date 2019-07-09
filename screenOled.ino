@@ -1,5 +1,6 @@
 //screen:
-#if defined(board_Heltec_WiFi_Kit_8) || defined(board_Heltec_WiFi_Kit_32)
+// #if defined(board_Heltec_WiFi_Kit_8) || defined(board_Heltec_WiFi_Kit_32)
+#ifdef OPTION_screen_OLED
 
 #include <Arduino.h>
 #include <U8g2lib.h>
@@ -26,13 +27,11 @@ static unsigned char u8g_logo_bits[] = {
 // the OLED used
 //https://github.com/olikraus/u8g2/wiki/u8g2setupcpp#ssd1306-128x64_noname
 
+//init OLED screen
+OPTION_screen_OLED
+
 //U8X8_SSD1306_128X64_NONAME_SW_I2C u8x8(/* clock=*/ 15, /* data=*/ 4, /* reset=*/ 16);
 // U8G2_SSD1306_128X64_NONAME_F_SW_I2C u8g2(U8G2_R0, /* clock=*/ 15, /* data=*/ 4, /* reset=*/ 16);
-#ifdef board_Heltec_WiFi_Kit_32
-U8G2_SSD1306_128X64_NONAME_F_SW_I2C u8g2(U8G2_R0, /* clock=*/ 15, /* data=*/ 4, /* reset=*/ 16);
-#elif defined(board_Heltec_WiFi_Kit_8)
-U8G2_SSD1306_128X32_UNIVISION_F_HW_I2C u8g2(U8G2_R0, /* reset=*/ 16, /* clock=*/ 5, /* data=*/ 4); 
-#endif
 
 char screenStatus[24] = "openHW";
 
@@ -84,7 +83,9 @@ void screenShow(const char *str)
 
   //draw data
   //different screens - different pars
-  #ifdef board_Heltec_WiFi_Kit_32
+
+  //board_Heltec_WiFi_Kit_32 , board_WEMOS_LoLin32_Oled
+  #if OPTION_screen_placement == 1 //"128X64"
     //128X64
     #define mfont_h 13 //font height with space
     #define mfont_w 8 //font width with space    
@@ -92,7 +93,17 @@ void screenShow(const char *str)
     #define mscr_w 128
 
     int y = 36; x = 0;    
-  #elif defined(board_Heltec_WiFi_Kit_8)
+  //defined(board_Heltec_WiFi_Kit_8)
+  //#elif OPTION_screen_placement == 128X32 
+  #elif OPTION_screen_placement == 10 //"128X64 compact"  
+    u8g2.setFont(u8g2_font_t0_11_tf);
+    #define mfont_h 9 //font height with space
+    #define mfont_w 6 //font width with space
+    #define mscr_h 64//screen height
+    #define mscr_w 128
+    
+    int y = 22+2+mfont_h; x = 0;  
+  #elif OPTION_screen_placement == 2 //"128X32"
 
 /*    
      TWO TEXT LINES
