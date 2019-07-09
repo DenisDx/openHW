@@ -323,35 +323,44 @@ This "Software" is Licensed Under  **`BSD 2-Clause "Simplified" License`** .
 
 # Version history
 
-##0.5
+## 0.5
 one board support added
+
 password support
+
 hardware button support
+
 TODO:
   - Solve the password salt problem to close the privkey0 decryption vulnerability knowing privkey1
   - settings (button mode, pinlock, pinmode...
   - bluetooth support for ESP32
 
-##0.4
+## 0.4
 solved buffer problem on AVR
+
 ECDH added
+
 manuals improved 
+
 bugs fixed
+
 TODO:
   - Password support
   - setPinMode, setPinLockDelay, setButtonMode support
   
-##0.3
+## 0.3
 minor changes
+
 arduino memory problem solved (-Og added... this is only way)
 
-##0.2
+## 0.2
 Fully functional (?). 
+
 TODO: 
   - ECDH
   - JTAG disable / EEPROM erase manual
   - Password support
   - setPinMode, setPinLockDelay, setButtonMode support
 
-##0.1 
+## 0.1 
 Initial version
