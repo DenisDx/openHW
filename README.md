@@ -332,7 +332,7 @@ hardware button support
 
 TODO:
   - Solve the password salt problem to close the privkey0 decryption vulnerability knowing privkey1
-  - settings (button mode, pinlock, pinmode...
+  - settings ( pinlock, pinmode... )
   - bluetooth support for ESP32
 
 ## 0.4
